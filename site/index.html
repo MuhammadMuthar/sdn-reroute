@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Learning the Cost of Rerouting</title>
+<meta name="description" content="Disruption-aware elephant-flow load balancing in an SDN controller. A research project by Mutahar and Uswa Fatima, NUST SEECS.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%232b5fd9'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%23f0a040'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,650;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="styles.css">
+<script>
+  // Apply a saved theme before first paint to avoid a flash.
+  try { var t = localStorage.getItem('theme'); if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+  document.documentElement.classList.add('js');
+</script>
+</head>
+<body>
+
+<header class="site-head">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="Learning the Cost of Rerouting, home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="var(--accent)"/><circle cx="16" cy="16" r="5" fill="var(--elephant)"/></svg>
+      Cost of Rerouting
+    </a>
+    <nav class="nav" aria-label="Sections">
+      <a href="#problem">Problem</a>
+      <a href="#question">Question</a>
+      <a href="#prior">Prior work</a>
+      <a href="#controllers">Controllers</a>
+      <a href="#metrics">Metrics</a>
+      <a href="#roadmap">Roadmap</a>
+      <a href="#results">Results</a>
+      <a href="#team">Team</a>
+    </nav>
+    <button class="theme-btn" id="theme-toggle" type="button" aria-label="Toggle light and dark theme" title="Toggle theme">
+      <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+    </button>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- ============ HERO ============ -->
+<section class="hero">
+  <div class="wrap">
+    <div class="hero-text">
+      <span class="eyebrow">EE-353 Computer Networks · NUST SEECS · Research project</span>
+      <h1>Learning the <span class="accent">Cost of Rerouting</span></h1>
+      <p class="lede">When an SDN controller moves a big TCP flow to an emptier path, the move itself hurts that flow. We measure that damage, teach a controller to predict it, and let it move flows only when the move is worth it.</p>
+      <span class="status-pill" id="status-pill"><span class="dot"></span><span id="status-text">Chunk 1 in progress · environment setup</span></span>
+      <div class="cta-row">
+        <a class="btn primary" href="#problem">Read the idea</a>
+        <a class="btn" href="https://github.com/MuhammadMuthar/sdn-reroute" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5A11.5 11.5 0 0 0 .5 12c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56v-2c-3.2.7-3.87-1.37-3.87-1.37-.52-1.33-1.28-1.68-1.28-1.68-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.78 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.42-2.7 5.4-5.26 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12 11.5 11.5 0 0 0 12 .5z"/></svg>
+          Source on GitHub
+        </a>
+      </div>
+    </div>
+
+    <figure class="hero-fig">
+      <div class="diagram" id="topo">
+        <!-- Leaf-spine topology with animated flows. Spines S1 and S2 are fast (1 ms), S3 and S4 are slow (5 to 10 ms). -->
+        <svg viewBox="0 0 600 352" role="img" aria-labelledby="topo-title topo-desc">
+          <title id="topo-title">Animated leaf-spine topology</title>
+          <desc id="topo-desc">Two leaf switches connected to four spine switches. Two elephant flows collide on the same slow spine while short mice flows use the others. The controller sends a flow modification and one elephant moves to a fast spine.</desc>
+          <defs>
+            <path id="pA" d="M140,300 L200,212 L350,92 L400,212 L340,300"/>
+            <path id="pB-old" d="M180,300 L200,212 L350,92 L400,212 L380,300"/>
+            <path id="pB-new" d="M180,300 L200,212 L150,92 L400,212 L380,300"/>
+            <path id="pM1" d="M220,300 L200,212 L250,92 L400,212 L420,300"/>
+            <path id="pM2" d="M460,300 L400,212 L450,92 L200,212 L260,300"/>
+            <path id="pM3" d="M420,300 L400,212 L150,92 L200,212 L220,300"/>
+          </defs>
+
+          <!-- links -->
+          <g>
+            <path class="link fast" d="M200,212 L150,92"/><path class="link fast" d="M200,212 L250,92"/>
+            <path class="link slow" d="M200,212 L350,92"/><path class="link slow" d="M200,212 L450,92"/>
+            <path class="link fast" d="M400,212 L150,92"/><path class="link fast" d="M400,212 L250,92"/>
+            <path class="link slow" d="M400,212 L350,92"/><path class="link slow" d="M400,212 L450,92"/>
+            <path class="link" d="M140,300 L200,212"/><path class="link" d="M180,300 L200,212"/><path class="link" d="M220,300 L200,212"/><path class="link" d="M260,300 L200,212"/>
+            <path class="link" d="M340,300 L400,212"/><path class="link" d="M380,300 L400,212"/><path class="link" d="M420,300 L400,212"/><path class="link" d="M460,300 L400,212"/>
+          </g>
+
+          <!-- controller -->
+          <g>
+            <rect class="ctl" x="238" y="14" width="124" height="28" rx="6"/>
+            <text class="t strong" x="300" y="32" text-anchor="middle">controller (os-ken)</text>
+            <path class="ctl-line" d="M300,42 L300,60 L200,60 L200,198">
+              <animate attributeName="stroke-opacity" values="0.35;0.35;1;1;0.35;0.35" keyTimes="0;0.44;0.46;0.56;0.58;1" dur="12s" repeatCount="indefinite"/>
+            </path>
+            <g opacity="0">
+              <animate attributeName="opacity" values="0;0;1;1;0;0" keyTimes="0;0.44;0.46;0.58;0.6;1" dur="12s" repeatCount="indefinite"/>
+              <rect class="ctl" x="86" y="118" width="112" height="22" rx="4"/>
+              <text class="t small" x="142" y="133" text-anchor="middle">FLOW_MOD: B → S1</text>
+            </g>
+          </g>
+
+          <!-- spines -->
+          <g>
+            <rect class="node spine" x="122" y="78" width="56" height="28" rx="5"/><text class="t strong" x="150" y="97" text-anchor="middle">S1</text><text class="t small" x="150" y="72" text-anchor="middle">1 ms</text>
+            <rect class="node spine" x="222" y="78" width="56" height="28" rx="5"/><text class="t strong" x="250" y="97" text-anchor="middle">S2</text><text class="t small" x="250" y="72" text-anchor="middle">1 ms</text>
+            <rect class="node spine" x="322" y="78" width="56" height="28" rx="5"/><text class="t strong" x="350" y="97" text-anchor="middle">S3</text><text class="t small" x="350" y="72" text-anchor="middle">5 ms</text>
+            <rect class="node spine" x="422" y="78" width="56" height="28" rx="5"/><text class="t strong" x="450" y="97" text-anchor="middle">S4</text><text class="t small" x="450" y="72" text-anchor="middle">5 ms</text>
+          </g>
+          <!-- leaves -->
+          <g>
+            <rect class="node leaf" x="168" y="198" width="64" height="28" rx="5"/><text class="t strong" x="200" y="217" text-anchor="middle">L1</text>
+            <rect class="node leaf" x="368" y="198" width="64" height="28" rx="5"/><text class="t strong" x="400" y="217" text-anchor="middle">L2</text>
+          </g>
+          <!-- hosts -->
+          <g>
+            <rect class="node host" x="126" y="290" width="28" height="20" rx="4"/><text class="t small" x="140" y="325" text-anchor="middle">h1</text>
+            <rect class="node host" x="166" y="290" width="28" height="20" rx="4"/><text class="t small" x="180" y="325" text-anchor="middle">h2</text>
+            <rect class="node host" x="206" y="290" width="28" height="20" rx="4"/><text class="t small" x="220" y="325" text-anchor="middle">h3</text>
+            <rect class="node host" x="246" y="290" width="28" height="20" rx="4"/><text class="t small" x="260" y="325" text-anchor="middle">h4</text>
+            <rect class="node host" x="326" y="290" width="28" height="20" rx="4"/><text class="t small" x="340" y="325" text-anchor="middle">h5</text>
+            <rect class="node host" x="366" y="290" width="28" height="20" rx="4"/><text class="t small" x="380" y="325" text-anchor="middle">h6</text>
+            <rect class="node host" x="406" y="290" width="28" height="20" rx="4"/><text class="t small" x="420" y="325" text-anchor="middle">h7</text>
+            <rect class="node host" x="446" y="290" width="28" height="20" rx="4"/><text class="t small" x="460" y="325" text-anchor="middle">h8</text>
+          </g>
+          <text class="t small" x="24" y="97">spines</text>
+          <text class="t small" x="24" y="217">leaves</text>
+          <text class="t small" x="24" y="304">hosts</text>
+          <text class="t small" x="576" y="345" text-anchor="end">10 Mbps links · dashed = slow spine</text>
+
+          <!-- elephant A: h1 -> S3 -> h5, always on the slow spine -->
+          <g>
+            <circle class="pkt e" r="5"><animateMotion dur="4s" repeatCount="indefinite" begin="0s"><mpath href="#pA"/></animateMotion></circle>
+            <circle class="pkt e" r="5"><animateMotion dur="4s" repeatCount="indefinite" begin="1s"><mpath href="#pA"/></animateMotion></circle>
+            <circle class="pkt e" r="5"><animateMotion dur="4s" repeatCount="indefinite" begin="2s"><mpath href="#pA"/></animateMotion></circle>
+            <circle class="pkt e" r="5"><animateMotion dur="4s" repeatCount="indefinite" begin="3s"><mpath href="#pA"/></animateMotion></circle>
+          </g>
+          <!-- elephant B: collides with A on S3 for the first half of the loop, then moves to S1 -->
+          <g>
+            <animate attributeName="opacity" values="1;1;0;0" keyTimes="0;0.5;0.5;1" dur="12s" repeatCount="indefinite"/>
+            <circle class="pkt e" r="5"><animateMotion dur="4s" repeatCount="indefinite" begin="0.5s"><mpath href="#pB-old"/></animateMotion></circle>
+            <circle class="pkt e" r="5"><animateMotion dur="4s" repeatCount="indefinite" begin="1.5s"><mpath href="#pB-old"/></animateMotion></circle>
+            <circle class="pkt e" r="5"><animateMotion dur="4s" repeatCount="indefinite" begin="2.5s"><mpath href="#pB-old"/></animateMotion></circle>
+            <circle class="pkt e" r="5"><animateMotion dur="4s" repeatCount="indefinite" begin="3.5s"><mpath href="#pB-old"/></animateMotion></circle>
+          </g>
+          <g opacity="0">
+            <animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.5;0.5;1" dur="12s" repeatCount="indefinite"/>
+            <circle class="pkt e" r="5"><animateMotion dur="2.6s" repeatCount="indefinite" begin="0s"><mpath href="#pB-new"/></animateMotion></circle>
+            <circle class="pkt e" r="5"><animateMotion dur="2.6s" repeatCount="indefinite" begin="0.65s"><mpath href="#pB-new"/></animateMotion></circle>
+            <circle class="pkt e" r="5"><animateMotion dur="2.6s" repeatCount="indefinite" begin="1.3s"><mpath href="#pB-new"/></animateMotion></circle>
+            <circle class="pkt e" r="5"><animateMotion dur="2.6s" repeatCount="indefinite" begin="1.95s"><mpath href="#pB-new"/></animateMotion></circle>
+          </g>
+          <!-- a "jam" glow on S3 while both elephants share it -->
+          <rect x="322" y="78" width="56" height="28" rx="5" fill="none" stroke="var(--damage)" stroke-width="2" opacity="0">
+            <animate attributeName="opacity" values="0.9;0.9;0;0" keyTimes="0;0.48;0.5;1" dur="12s" repeatCount="indefinite"/>
+          </rect>
+          <!-- mice -->
+          <g>
+            <circle class="pkt" r="3"><animateMotion dur="2.2s" repeatCount="indefinite" begin="0s"><mpath href="#pM1"/></animateMotion></circle>
+            <circle class="pkt" r="3"><animateMotion dur="2.2s" repeatCount="indefinite" begin="1.3s"><mpath href="#pM1"/></animateMotion></circle>
+            <circle class="pkt" r="3"><animateMotion dur="3.8s" repeatCount="indefinite" begin="0.4s"><mpath href="#pM2"/></animateMotion></circle>
+            <circle class="pkt" r="3"><animateMotion dur="2.4s" repeatCount="indefinite" begin="0.9s"><mpath href="#pM3"/></animateMotion></circle>
+            <circle class="pkt" r="3"><animateMotion dur="2.4s" repeatCount="indefinite" begin="2.1s"><mpath href="#pM3"/></animateMotion></circle>
+          </g>
+        </svg>
+        <div class="diagram-caption">
+          <span class="legend elephant"><i></i>elephant flow</span>
+          <span class="legend mice"><i></i>mice flows</span>
+          <span class="legend spine"><i></i>fast spine (1 ms)</span>
+          <span class="legend damage"><i></i>collision</span>
+        </div>
+      </div>
+      <figcaption>The four-path leaf-spine used in Chunk 2. Two elephants hash onto the same slow spine; the controller moves one of them to a fast spine. That move is the thing we price.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ============ PROBLEM ============ -->
+<section id="problem" class="band">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">The problem in plain language</span>
+      <h2>A network is a city of highways. Moving a truck mid-trip is not free.</h2>
+    </div>
+    <div class="split">
+      <div class="prose reveal">
+        <p>Picture a data-center network as a city of highways. Most cars are short trips, the <strong>mice</strong>. A few are huge trucks that hog a lane for a long time, the <strong>elephants</strong>. The usual rule, <strong>ECMP</strong>, assigns each vehicle a lane by hashing its licence plate. Sometimes two trucks land in the same lane and jam it while other lanes sit empty.</p>
+        <p>A central traffic controller (the SDN controller) can see the jam and wave a truck into an emptier lane. The catch: the truck's cargo now arrives jumbled. TCP reads the jumble as loss, retransmits packets it did not need to, and cuts its sending rate. If the controller is too eager, trucks keep switching lanes back and forth and everything gets worse.</p>
+        <p>On an ONOS and Open vSwitch testbed, rerouting a TCP flow every 0.1 s cut its throughput to as low as 35% of normal, and every 2 s to about 60% (Cârpa et al., CNSM 2017). Yet the controllers that do the moving decide by path load alone. <strong>None of them knows how much a move will hurt.</strong></p>
+      </div>
+      <div class="diagram reveal" aria-label="Animated lanes showing mice and elephant flows under ECMP">
+        <div class="lanes">
+          <div class="lane-group">
+            <h4>Four equal paths, ECMP hashing</h4>
+            <div class="lane"><span class="label">path 1</span><span class="flow mouse"></span><span class="flow mouse"></span><span class="flow mouse"></span><span class="flow mouse"></span><span class="flow mouse"></span></div>
+            <div class="lane"><span class="label">path 2</span><span class="flow mouse"></span><span class="flow mouse"></span><span class="flow mouse"></span></div>
+            <div class="lane jammed"><span class="fill"></span><span class="label">path 3</span><span class="flow elephant"></span><span class="flow elephant second"></span><span class="flow mouse"></span><span class="flow mouse"></span></div>
+            <div class="lane"><span class="label">path 4</span><span class="flow mouse"></span><span class="flow mouse"></span></div>
+          </div>
+          <p class="lane-note">Two elephants hashed onto path 3. It saturates, every mouse sharing it waits, and path 4 is nearly idle. A Hedera-style controller would move one elephant. The question is what that move costs the elephant.</p>
+        </div>
+        <div class="diagram-caption">
+          <span class="legend elephant"><i></i>elephant (long, carries most bytes)</span>
+          <span class="legend mice"><i></i>mouse (short)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ REORDERING ============ -->
+<section id="reorder">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">What a reroute does to TCP</span>
+      <h2>New packets overtake old ones. TCP calls that loss.</h2>
+      <p class="muted">Reordering happens when a flow moves from a slower path to a faster one. Segments already in flight on the old path are overtaken by new ones on the new path. The receiver sees a gap, sends duplicate ACKs, and the sender retransmits and halves its congestion window. Our diagram uses the Chunk 2 delays: 5 ms on the old spine, 1 ms on the new.</p>
+    </div>
+    <div class="diagram reveal">
+      <div class="reorder" aria-label="Animation of segments 5 to 8 overtaking segments 1 to 4 after a reroute">
+        <div class="stage">
+          <div class="path slow"><span class="ptag">S3 · 5 ms</span></div>
+          <div class="path fast"><span class="ptag">S1 · 1 ms</span></div>
+          <div class="ctl-event">FLOW_MOD · move to S1</div>
+          <span class="seg s1">1</span><span class="seg s2">2</span><span class="seg s3">3</span><span class="seg s4">4</span>
+          <span class="seg s5 after">5</span><span class="seg s6 after">6</span><span class="seg s7 after">7</span><span class="seg s8 after">8</span>
+          <div class="recv">receiver<br>sees 5 before 3</div>
+        </div>
+        <div class="goodput">
+          <span class="ptag">goodput</span>
+          <svg viewBox="0 0 600 48" preserveAspectRatio="none" aria-hidden="true">
+            <rect class="gp-dip" x="215" y="0" width="150" height="48"/>
+            <path class="gp-line" d="M0,12 L200,12 L225,14 L245,40 L270,36 L300,30 L340,20 L380,13 L600,12"/>
+          </svg>
+        </div>
+        <div class="steps">
+          <div><b>t = 0</b>Elephant runs steadily on S3. Segments 1 to 4 are in flight.</div>
+          <div><b>reroute</b>One OFPFC_MODIFY on the ingress leaf points the flow at S1.</div>
+          <div><b>overtake</b>Segments 5 to 8 arrive on the 1 ms path before 3 and 4 finish the 5 ms path.</div>
+          <div><b>damage</b>Duplicate ACKs, a spurious retransmission, a cwnd cut. The dip, in bytes, is the cost we want to predict.</div>
+        </div>
+      </div>
+      <div class="diagram-caption">
+        <span class="legend damage"><i></i>goodput deficit after the move</span>
+        <span>Modern Linux TCP (RACK, DSACK) adapts to repeated reordering, so the damage can shrink with each move. Chunk 2 exists to measure whether it is large enough to matter.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ QUESTION ============ -->
+<section id="question" class="band">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">Research question</span>
+      <h2>How much does each reroute cost, and can a controller that predicts the cost keep the gain?</h2>
+    </div>
+    <div class="split">
+      <div class="prose reveal">
+        <ol>
+          <li><strong>How much damage does each reroute actually cause, and what predicts it?</strong> Flow rate, bytes sent so far, the delay difference between old and new path, the load on both, time since the last move, number of previous moves.</li>
+          <li><strong>Can a controller that predicts damage keep most of Hedera's gain over ECMP while causing much less of it?</strong> Two predictors: a hand-written formula and a learned model (decision tree or gradient boosting, scikit-learn, inference well under a millisecond).</li>
+        </ol>
+        <p>The decision rule moves flow <code>f</code> from path <code>p</code> to path <code>q</code> only when the expected gain beats the predicted damage, and never within a cooldown of the last move.</p>
+        <div class="note">
+          <strong>Chunk 0 revision (pending approval).</strong> As written in the proposal, the gain side is a rate and the cost side is a segment count, so the two are not comparable. The plan now puts both sides in <em>bytes over a decision horizon</em> H: gain is the extra bytes <code>f</code> would deliver on <code>q</code> during H, cost is the predicted goodput deficit during recovery after the move.
+        </div>
+      </div>
+      <div class="reveal" style="display:grid; gap:1rem; min-width:0;">
+        <div class="rule" aria-label="Decision rule">
+          <div class="line"><span class="k">move</span> f : p → q  <span class="k">iff</span></div>
+          <div class="line">&nbsp;&nbsp;<span class="g">Gain</span>(f, p, q, H)  &gt;  <span class="c">Ĉ</span>(f, p, q)</div>
+          <div class="line">&nbsp;&nbsp;<span class="k">and</span>  t − t<sub>last</sub>(f)  &gt;  T<sub>cool</sub></div>
+          <div class="line small muted">original: (Û<sub>p</sub> − Û<sub>q</sub>) · r<sub>f</sub> &gt; Ĉ<sub>ML</sub>(f, p, q)</div>
+        </div>
+        <div class="defs">
+          <div><code>Û</code><span class="muted small">EWMA-smoothed path load (PayLess-style polling, 1 to 2 s)</span></div>
+          <div><code>r_f</code><span class="muted small">current rate of the flow, from flow-stats deltas</span></div>
+          <div><code>Ĉ</code><span class="muted small">predicted damage: formula or ML model, in bytes</span></div>
+          <div><code>T_cool</code><span class="muted small">per-flow cooldown; also tested alone as an ablation</span></div>
+          <div><code>H</code><span class="muted small">decision horizon, around 5 s</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PRIOR WORK ============ -->
+<section id="prior">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">What is new, and what is not</span>
+      <h2>The cautious-rerouting principle is already published. The measurement is not.</h2>
+      <p class="muted">We do not claim "only move when it is worth it" as new. Hermes (SIGCOMM 2017) and FlexDATE (IEEE/ACM ToN 2022) got there first. What we found nobody doing is pricing each move with an explicit per-flow estimate inside a reactive OpenFlow controller, and measuring the TCP-level harm of every policy against ECMP and Hedera.</p>
+    </div>
+    <div class="table-wrap reveal">
+      <table>
+        <thead><tr><th>Component</th><th>Already covered by</th><th>Still open (our part)</th></tr></thead>
+        <tbody>
+          <tr><td>Reroute only if gain clearly beats disruption</td><td>Hermes (host-based kernel module, fixed margins, microsecond timescale); FlexDATE (SDN, offline RL plus LP)</td><td class="open">Doing it in a reactive controller at seconds-scale polling</td></tr>
+          <tr><td>Estimated migration cost</td><td>Not found as an explicit per-flow estimate</td><td class="open">Cost from flow rate, bytes sent, delay difference, time since last move</td></tr>
+          <tr><td>Cooldown and hysteresis</td><td>Standard control practice; oscillation shown by Hermes and Cârpa</td><td class="open">Measured flap counts with and without it, as a separate ablation</td></tr>
+          <tr><td>EWMA and adaptive polling</td><td>PayLess (NOMS 2014)</td><td class="open">Effect of the polling policy on decision quality</td></tr>
+          <tr><td>Disruption metrics</td><td>Cârpa et al. (CNSM 2017), testbed, single flow, no decision rule</td><td class="open">Retransmissions, reordering, flaps per policy vs ECMP and Hedera, with 95% CIs</td></tr>
+          <tr><td>Elephant rerouting baseline</td><td>Hedera (NSDI 2010): no migration cost, no reorder model, no count of moves</td><td class="open">A Hedera-style greedy mover that logs every move with its pre-move features</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="cols-3" style="margin-top:1.5rem">
+      <div class="card reveal"><span class="role">Hermes · SIGCOMM 2017</span><h3>Right rule, no controller, no damage metric</h3><p>Moves a flow only when the candidate path is clearly better. Reports flow completion time only. Runs on end hosts.</p></div>
+      <div class="card reveal"><span class="role">Hedera · NSDI 2010</span><h3>The controller, blind to disruption</h3><p>Detects elephants at 10% of NIC rate, reschedules every 5 s, never counts how many flows it moves.</p></div>
+      <div class="card reveal"><span class="role">Cârpa et al. · CNSM 2017</span><h3>Measures the harm, proposes no rule</h3><p>Throughput down to 35% at 0.1 s reroutes, 60% at 2 s. Warns that the post-reroute dip can be mistaken for a need to reroute again.</p></div>
+    </div>
+    <p class="small muted reveal" style="margin-top:1rem; max-width:var(--col)">Caveat we carry into the paper: the prior-work search was partial. DPLBAnt (Computer Communications 2021) and an MDPI paper on minimizing interruptions in SDN flow redirection are still unread and must be checked before any novelty claim is final.</p>
+  </div>
+</section>
+
+<!-- ============ CONTROLLERS ============ -->
+<section id="controllers" class="band">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">The controllers we compare</span>
+      <h2>Two baselines, one ablation, two versions of ours.</h2>
+      <p class="muted">All five run through the same experiment runner on identical, seeded traffic. The cooldown-only variant was added in the Chunk 0 review so that a win cannot be credited to the cooldown alone.</p>
+    </div>
+    <div class="cards">
+      <div class="card reveal"><span class="num">1</span><h3>ECMP</h3><span class="role">static baseline</span><p>OpenFlow 1.3 select groups. The switch hashes each flow onto a spine and never looks at load. Pays nothing in disruption, suffers elephant collisions.</p></div>
+      <div class="card reveal"><span class="num">2</span><h3>Hedera-style greedy</h3><span class="role">dynamic baseline</span><p>Poll stats every 1 to 2 s. Elephant = more than 10% of link capacity. Move it to the least-loaded path. Named "Hedera-style", not Hedera: no demand estimation, no simulated annealing.</p></div>
+      <div class="card reveal"><span class="num">3</span><h3>Cooldown only</h3><span class="role">ablation</span><p>Hedera-style plus a per-flow cooldown and a fixed hysteresis margin. No damage estimate. If this alone captures most of the gain, the paper changes.</p></div>
+      <div class="card ours reveal"><span class="num">4</span><h3>Cost-aware, formula</h3><span class="role">ours</span><p>The decision rule with a hand-written damage formula built from the Chunk 5 dataset. Isolates what machine learning adds.</p></div>
+      <div class="card ours reveal"><span class="num">5</span><h3>Cost-aware, ML</h3><span class="role">ours</span><p>The same rule with a decision tree or gradient-boosted model predicting the goodput deficit. Evaluated on held-out scenario groups against predict-the-mean and the formula.</p></div>
+    </div>
+    <div class="note info reveal" style="margin-top:1.5rem; max-width:var(--col)">
+      <strong>One move is one flow-mod.</strong> Spines and the egress leaf forward by destination; only the ingress leaf picks the spine. A reroute is a single OFPFC_MODIFY on one switch, so there is no rule-install loss and every bit of measured damage is TCP behaviour.
+    </div>
+  </div>
+</section>
+
+<!-- ============ METRICS ============ -->
+<section id="metrics">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">Metrics</span>
+      <h2>Benefit kept, damage caused, model quality, and rigor.</h2>
+    </div>
+    <div class="metric-groups">
+      <div class="metric-group reveal"><h3><i style="background:var(--ok)"></i>Benefit kept</h3><ul><li>Elephant throughput</li><li>Short-flow completion time, p50 and p99 (reported per spine class on the delay-asymmetric topology)</li><li>Maximum link utilization</li><li>AI-round completion time: synchronized rounds of equal-size elephants</li></ul></div>
+      <div class="metric-group reveal"><h3><i style="background:var(--damage)"></i>Damage caused</h3><ul><li>Goodput deficit after each move, relative to the steady state on the new path, in bytes</li><li>Retransmitted, spurious and out-of-order segments per move (kernel counters via nstat first, tshark as cross-check)</li><li>cwnd-undo events</li><li>Reroutes per minute and flaps (A to B to A within a window)</li></ul></div>
+      <div class="metric-group reveal"><h3><i style="background:var(--accent)"></i>Model quality</h3><ul><li>Prediction error on held-out scenario groups, against predict-the-mean and the formula</li><li>Decision time per flow</li><li>Closed-loop: does the model controller make better moves than the formula controller?</li></ul></div>
+      <div class="metric-group reveal"><h3><i style="background:var(--elephant)"></i>Rigor</h3><ul><li>10 paired runs per configuration on the same seeds, means with 95% confidence intervals</li><li>Every number from a rerunnable script in the repo; raw results never edited by hand</li><li>Kernel TCP sysctls logged in every result row; <code>ip tcp_metrics flush</code> between runs</li><li>Negative results reported as measured</li></ul></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ROADMAP ============ -->
+<section id="roadmap" class="band">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">Roadmap</span>
+      <h2>One chunk per session. Every finish line must run.</h2>
+      <p class="muted">The gate in Chunk 2 comes before any baseline work on purpose: if a reroute between unequal-delay paths does not produce countable damage in our setup, the project pivots instead of pretending.</p>
+    </div>
+    <div class="roadmap reveal" id="roadmap-list">
+      <div class="chunk done"><div class="marker">0</div><div class="body"><h3>Plan review <span class="tag done">done · 19 Oct 2026</span></h3><p>Read the proposal, research-gap note and course handout. Found twelve technical risks, among them the unit mismatch in the decision rule, the damage-label definition, Linux RACK absorbing reordering, netem queue depth and the missing cooldown-only control. Produced a revised chunk plan.</p><span class="finish"><b>Output:</b> CHUNK0_REVIEW.md and CHUNKS.md, revisions pending approval</span></div></div>
+      <div class="chunk active"><div class="marker">1</div><div class="body"><h3>Frozen environment <span class="tag active">in progress</span></h3><p>Choose os-ken (maintained Ryu fork) over Ryu 4.34, which breaks on Python 3.10+. A minimal learning switch forwards traffic in a 2-switch Mininet. <code>setup.sh</code> and <code>requirements.txt</code> rebuild it from scratch. <code>scripts/sysinfo.sh</code> records kernel, OVS, Mininet and all TCP sysctls.</p><span class="finish"><b>Finish line:</b> idle iperf3 on a 10 Mbps TCLink reaches about 95% of 10 Mbps. <b>Status:</b> cloud prep done, verification on the laptop pending (Mininet needs root).</span></div></div>
+      <div class="chunk"><div class="marker">2</div><div class="body"><h3>The reordering gate <span class="tag">planned · stop-and-ask point</span></h3><p>Build the 4-path leaf-spine with two fast (1 ms) and two slow (5 to 10 ms) spines, queue capped near 2× BDP. Write the pass criterion before the first run: spurious retransmissions or reorder events in most moves, and a goodput deficit in the 2 s after the move whose 95% CI excludes zero. Both directions, at least two delay gaps, 10 repetitions each.</p><span class="finish"><b>Finish line:</b> <code>results/gate/*.csv</code> and a throughput time series around the reroute from <code>analysis/gate.py</code>. If the criterion fails, stop and report; never tune the kernel to pass.</span></div></div>
+      <div class="chunk"><div class="marker">3</div><div class="body"><h3>ECMP baseline and traffic generator <span class="tag">planned</span></h3><p>OpenFlow 1.3 select groups on the leaf-spine. Seeded iperf3 elephants with fixed source ports, plus a small Python client and server for heavy-tailed mice that logs each completion time.</p><span class="finish"><b>Finish line:</b> one command runs ECMP N times with seeds and writes a CSV; the same seed reproduces the same flow schedule.</span></div></div>
+      <div class="chunk"><div class="marker">4</div><div class="body"><h3>Hedera-style baselines and first comparison <span class="tag">planned · Stage 2 ready</span></h3><p>Greedy controller logging every reroute with its pre-move features, plus the cooldown-only flag. ECMP vs Hedera-style vs cooldown-only, 10 paired runs, with 95% CIs.</p><span class="finish"><b>Finish line:</b> figures in <code>figures/</code> from one analysis script; a results summary that becomes the milestone report.</span></div></div>
+      <div class="chunk"><div class="marker">5</div><div class="body"><h3>Damage dataset <span class="tag">planned</span></h3><p>Automated campaign of deliberate reroutes under varied rate, delay gap and direction, load, time since last move, previous moves and concurrent flows. Each row carries the controller-visible features, the measured damage and a scenario id for grouped splits.</p><span class="finish"><b>Finish line:</b> dataset CSV, data dictionary, feature-vs-damage correlation table and plot.</span></div></div>
+      <div class="chunk"><div class="marker">6</div><div class="body"><h3>Model and proposed controller <span class="tag">planned</span></h3><p>Train decision tree and gradient boosting on the damage label; evaluate on held-out scenario groups against predict-the-mean and the formula. Implement the cost-aware controller in both variants with gain and cost in the same units.</p><span class="finish"><b>Finish line:</b> all five controllers through the same runner and a first 5-way comparison.</span></div></div>
+      <div class="chunk"><div class="marker">7</div><div class="body"><h3>Stage 3 head start <span class="tag stage3">Stage 3</span></h3><p>k=4 fat-tree with ARP handling, mid-run link degrade, the AI-round pattern, full 10-run campaigns, paper figures, and a README reproduction test by Uswa on a clean machine.</p></div></div>
+    </div>
+    <div class="deadline"><span>Stage 2 milestone report due <b>15 November 2026</b></span><span>Stage 3: final report, code and video</span><span>Stage 4: viva</span></div>
+  </div>
+</section>
+
+<!-- ============ RESULTS ============ -->
+<section id="results">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">Results</span>
+      <h2>Nothing measured yet. That is on purpose.</h2>
+      <p class="muted">Every number on this page will come from a script in the repository that anyone can rerun. Until Chunk 2 produces the first CSV, the panels below are placeholders that say which chunk and which script will fill them. This section reads <code>results/results.json</code>, so later chunks drop their figures in without touching the page.</p>
+    </div>
+    <div class="results-state reveal" id="results-state">
+      <strong>Status</strong>
+      <span id="results-note">No experiment has run. Chunk 1 (environment) is in progress; the first measurements arrive with Chunk 2, the reordering gate.</span>
+      <span class="small muted" id="results-updated"></span>
+    </div>
+    <div class="numbers reveal" id="numbers" hidden></div>
+    <div class="figs reveal" id="figs" style="margin-top:1rem"></div>
+    <noscript><p class="small muted" style="margin-top:1rem">Enable JavaScript to see the results panels, or open <code>results/results.json</code> directly.</p></noscript>
+  </div>
+</section>
+
+<!-- ============ TEAM ============ -->
+<section id="team" class="band">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">Team and tools</span>
+      <h2>Who is doing this, and with what.</h2>
+    </div>
+    <div class="team reveal">
+      <div class="person"><div class="avatar" style="background:var(--accent)">M</div><div class="who"><b>Mutahar</b><span>BESE-16AB, NUST SEECS · GitHub: MuhammadMuthar</span></div></div>
+      <div class="person"><div class="avatar" style="background:var(--elephant)">U</div><div class="who"><b>Uswa Fatima</b><span>BESE-16AB, NUST SEECS</span></div></div>
+      <div class="person"><div class="avatar" style="background:var(--mice)">AH</div><div class="who"><b>Ali Hassan</b><span>Instructor, EE-353 Computer Networks · Lab engineer: Rafia Ahmad</span></div></div>
+    </div>
+    <div class="prose reveal" style="margin-top:1.5rem">
+      <p>We treat this as a real research problem. The target is a result that would survive a conference reviewer, with the course milestones as checkpoints along the way.</p>
+      <div class="tools" aria-label="Software and tools">
+        <span>Ubuntu (native)</span><span>Mininet</span><span>Open vSwitch · OpenFlow 1.3</span><span>os-ken (Ryu fork)</span><span>iperf3</span><span>tcpdump · tshark</span><span>nstat · ss</span><span>Python · pandas · matplotlib</span><span>scikit-learn</span><span>GitHub</span><span>Raspberry Pi 4/5 testbed (optional)</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Learning the Cost of Rerouting · EE-353 Computer Networks, Stage 1 proposal to final report, 2026.</span>
+    <span>Source, scripts and raw results: <a href="https://github.com/MuhammadMuthar/sdn-reroute" rel="noopener">github.com/MuhammadMuthar/sdn-reroute</a>. Prior work cited: Hedera (NSDI 2010), Hermes (SIGCOMM 2017), FlexDATE (ToN 2022), Cârpa et al. (CNSM 2017), PayLess (NOMS 2014), Dionysus (SIGCOMM 2014).</span>
+  </div>
+</footer>
+
+<script src="main.js"></script>
+</body>
+</html>
