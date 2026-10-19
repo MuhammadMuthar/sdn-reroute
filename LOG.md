@@ -243,3 +243,14 @@ From `results/gate/gate-2026-10-19/verdict.md` (analysis/gate.py):
 Not done: the sudo cross-check (`sudo ./scripts/chunk2_sudo.sh`, R2 and C1 x3
 on the system OVS) needs Mutahar. Stopping here per the gate rule because the
 damage is small; whether that is enough to build on is Mutahar's call.
+
+### Gate decision
+
+Recorded as PASSED with a caveat: the criterion is met, but the damage of a
+single move on an idle path is small (0.3 % at 4 ms, 2.8 % at 9 ms, mostly
+from 3 RTO trials). The project recommendation, open to Mutahar's override,
+is to go to Chunk 3 rather than extend the gate. The mechanism to test under
+load there: spurious retransmissions after a slow->fast move trigger a cwnd
+cut that the kernel never undoes; on an idle path it only drains the standing
+queue, but with competing flows it should cost throughput share. Chunk 2
+closes after the sudo cross-check (`sudo ./scripts/chunk2_sudo.sh`).

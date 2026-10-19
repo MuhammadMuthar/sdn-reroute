@@ -1,8 +1,10 @@
 # STATUS (rewritten at the end of every session)
 
-Last session: Chunk 2, the reordering gate, laptop, 2026-10-19. The gate
-PASSES its pre-registered criterion, but the measured damage is small.
-Waiting for Mutahar's decision before Chunk 3.
+Last session: Chunk 2, the reordering gate, laptop, 2026-10-19. Gate status:
+PASSED with a caveat. The pre-registered criterion is met, but single-flow
+damage on an idle path is small. Plan (project recommendation, Mutahar can
+override): go to Chunk 3 and test the damage mechanism under load. Chunk 2
+closes once the sudo cross-check is in.
 
 ## What works
 
@@ -35,14 +37,17 @@ the cut costs almost no goodput.
 
 ## Next
 
-Pending Mutahar's decision (see open question 1). If the gate is accepted:
-Chunk 3 (ECMP baseline and traffic generator, CHUNKS.md section B).
+Chunk 3 (ECMP baseline and traffic generator, CHUNKS.md section B), after
+the sudo cross-check. Carry this into Chunk 3: the mechanism to test under
+load is spurious retransmissions after a slow->fast move plus a cwnd cut the
+kernel never undoes (TCPDSACKUndo = TCPLossUndo = 0 in all 80 trials). On an
+idle path the cut only drains the standing queue; with competing flows it
+should cost throughput share. Unmeasured so far.
 
 ## Open questions for Mutahar
 
-1. The gate passes, but single-flow damage is tiny (0.3 % for a 4 ms gap,
-   2.8 % for 9 ms, driven by occasional RTOs). Accept and go to Chunk 3, where
-   competing traffic should make cwnd cuts cost real throughput? Or first add
-   a gate condition with background load to check that damage grows there?
+1. Gate recorded as passed with a caveat and the plan is to go to Chunk 3
+   (recommended in the project chat). Override if you would rather add a
+   gate condition with background load first.
 2. Run `sudo ./scripts/chunk2_sudo.sh` once (verify.sh plus an R2/C1 x3
    cross-check on the system OVS, ~6 min) to confirm the rootless runs match.
