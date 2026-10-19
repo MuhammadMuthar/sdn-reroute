@@ -254,3 +254,21 @@ load there: spurious retransmissions after a slow->fast move trigger a cwnd
 cut that the kernel never undoes; on an idle path it only drains the standing
 queue, but with competing flows it should cost throughput share. Chunk 2
 closes after the sudo cross-check (`sudo ./scripts/chunk2_sudo.sh`).
+
+### Sudo cross-check (Mutahar ran `sudo ./scripts/chunk2_sudo.sh`, 18:41)
+
+- verify.sh: SMOKE PASS, pingall 0 %, iperf3 9.54 Mbit/s (95.4 %), row
+  appended to results/verify/...csv. The chown fix works: every file it
+  wrote is owned by muhammad-muthar:muhammad-muthar.
+- Gate cross-check as root on the system OVS (no user namespaces), R2 and C1,
+  3 trials each, `results/gate/sudo-check-2026-10-19/verdict.md`. It agrees
+  with the rootless campaign: R2 events 3/3 (rootless 10/10), C1 0/3
+  (0/10); C1 goodput in W 9.557 Mbit/s (9.565); R2 cwnd 44 -> 19 (43 -> 22);
+  R2 RTO in 1 of 3 trials (3 of 10); deficit in R2 trials without an RTO
+  13.0 KB (rootless 10.8 KB [7.5, 14.0]). n = 3 is too small for its own CI,
+  so this is a consistency check, not a second gate.
+- analysis/gate.py printed "FAIL" for the 3-trial subset because R1 is
+  missing; it now says "not applicable" unless R1 and R2 both have 10
+  trials. The gate-2026-10-19 verdict is unchanged (PASS).
+
+Chunk 2 closed. Next: Chunk 3.

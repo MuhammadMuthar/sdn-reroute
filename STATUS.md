@@ -4,11 +4,13 @@ Last session: Chunk 2, the reordering gate, laptop, 2026-10-19. Gate status:
 PASSED with a caveat. The pre-registered criterion is met, but single-flow
 damage on an idle path is small. Plan (project recommendation, Mutahar can
 override): go to Chunk 3 and test the damage mechanism under load. Chunk 2
-closes once the sudo cross-check is in.
+is closed: the sudo cross-check (verify.sh 9.54 Mbit/s PASS; R2/C1 x3 as
+root on the system OVS) agrees with the rootless campaign.
 
 ## What works
 
-- Everything from Chunk 1 (environment, os-ken on Python 3.14, verify.sh).
+- Everything from Chunk 1 (environment, os-ken on Python 3.14, verify.sh;
+  re-verified under sudo 2026-10-19T18:41, 9.54 Mbit/s).
 - `scripts/userns.sh` runs Mininet + kernel OVS without sudo in fresh user/net
   namespaces; smoke iperf3 9.44 Mbit/s (sudo on the same laptop: 9.45).
 - `topologies/leafspine.py` (2 leaves, 4 spines at 1/1/5/10 ms, 10 Mbit/s,
@@ -37,8 +39,7 @@ the cut costs almost no goodput.
 
 ## Next
 
-Chunk 3 (ECMP baseline and traffic generator, CHUNKS.md section B), after
-the sudo cross-check. Carry this into Chunk 3: the mechanism to test under
+Chunk 3 (ECMP baseline and traffic generator, CHUNKS.md section B). Carry this into Chunk 3: the mechanism to test under
 load is spurious retransmissions after a slow->fast move plus a cwnd cut the
 kernel never undoes (TCPDSACKUndo = TCPLossUndo = 0 in all 80 trials). On an
 idle path the cut only drains the standing queue; with competing flows it
@@ -49,5 +50,3 @@ should cost throughput share. Unmeasured so far.
 1. Gate recorded as passed with a caveat and the plan is to go to Chunk 3
    (recommended in the project chat). Override if you would rather add a
    gate condition with background load first.
-2. Run `sudo ./scripts/chunk2_sudo.sh` once (verify.sh plus an R2/C1 x3
-   cross-check on the system OVS, ~6 min) to confirm the rootless runs match.
