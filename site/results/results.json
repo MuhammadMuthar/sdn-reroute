@@ -1,47 +1,47 @@
 {
-  "_comment": "Read by main.js. Later chunks edit this file: set status, add numbers (each with the script that produced it), and set figures[].src to an image under site/results/ once analysis/ has produced it. Never type a number here that did not come from a script.",
+  "_comment": "Read by main.js. Later chunks edit this file: update status, add a block to results_so_far (newest first), add numbers (each with the script that produced it), and set figures[].src to an image under site/results/ once analysis/ has produced it. Never type a number here that did not come from a script.",
   "updated": "2026-10-19",
   "status": {
-    "chunk": 3,
-    "headline": "Chunk 2 gate passed · Chunk 3 ECMP baseline in progress",
-    "note": "Chunk 2, the reordering gate, is closed: 80 trials on the laptop, pre-registered criterion met, with the caveat that single-flow damage on an idle path is small. Chunk 3 (ECMP baseline and traffic generator) is in progress and carries the mechanism into a loaded network."
+    "chunk": 4,
+    "headline": "Chunks 2 and 3 done · Chunk 4 controllers in progress",
+    "note": "Chunk 2 (reordering gate) and Chunk 3 (ECMP baseline, reusable runner, loaded-move test) are closed on the laptop. Chunk 4, the Hedera-style and cooldown-only controllers against ECMP, is in progress."
   },
   "numbers": [
     {
-      "label": "Trials in the gate campaign (5 reroute conditions, 3 controls, 10 each)",
-      "value": "80",
-      "unit": "",
-      "source": "analysis/gate.py → results/gate/gate-2026-10-19/verdict.md"
+      "label": "Elephant goodput under ECMP when 1 / 2 / 3 elephants share its uplink",
+      "value": "8.70 / 4.42 / 3.09",
+      "unit": "Mbit/s",
+      "source": "analysis/ecmp.py, 10 seeds"
     },
     {
-      "label": "Slow→fast moves with a reorder or spurious-retransmission event (4 ms and 9 ms gaps)",
+      "label": "Mice flow completion time under ECMP, p50 and p99",
+      "value": "50.8 / 1210",
+      "unit": "ms",
+      "source": "analysis/ecmp.py"
+    },
+    {
+      "label": "Moved elephant after a slow→fast move onto a loaded path, vs a no-gap move",
+      "value": "+13",
+      "unit": "%",
+      "source": "analysis/loaded_move.py, 10 s window"
+    },
+    {
+      "label": "Bystander elephant on that path, vs no move",
+      "value": "−17",
+      "unit": "%",
+      "source": "analysis/loaded_move.py"
+    },
+    {
+      "label": "Same move measured with the TSQ artifact left in: moved elephant",
+      "value": "−47",
+      "unit": "%",
+      "source": "loaded-default ablation"
+    },
+    {
+      "label": "Slow→fast moves with a reorder or spurious retransmission, idle path (gate)",
       "value": "10 / 10",
       "unit": "",
-      "source": "verdict.md, rows R1 and R2"
-    },
-    {
-      "label": "Controls with any such event (no reroute, 3 paths)",
-      "value": "0 / 30",
-      "unit": "",
-      "source": "verdict.md, rows C1, C3, C4"
-    },
-    {
-      "label": "Goodput deficit in the 2 s after a slow→fast move, 4 ms gap",
-      "value": "0.29",
-      "unit": "%",
-      "source": "verdict.md, R1: 6.9 KB, CI [0.015, 0.040] Mbit/s"
-    },
-    {
-      "label": "Goodput deficit in the 2 s after a slow→fast move, 9 ms gap",
-      "value": "2.81",
-      "unit": "%",
-      "source": "verdict.md, R2: 67.1 KB, CI [0.008, 0.529] Mbit/s"
-    },
-    {
-      "label": "Sender cwnd before → minimum after a 9 ms slow→fast move",
-      "value": "43 → 22",
-      "unit": "segments",
-      "source": "verdict.md, R2; DSACK undo and loss undo = 0 in all trials"
+      "source": "analysis/gate.py"
     }
   ],
   "figures": [
@@ -56,21 +56,42 @@
       "alt": "Five panels of goodput and congestion window versus time around a reroute at t = 0. Slow-to-fast moves show a goodput dip to about 8 and 5.5 Mbit/s and a drop in cwnd; fast-to-slow and control traces stay flat."
     },
     {
+      "id": "ecmp-spread",
+      "chunk": 3,
+      "kind": "bars",
+      "title": "ECMP on the leaf-spine: hash collisions decide both",
+      "caption": "Left: mice completion time by how many elephants share the mouse’s uplink. Right: elephant goodput by how many elephants share its uplink, 10 seeded runs.",
+      "script": "analysis/ecmp.py → figures/ecmp_baseline.png",
+      "src": "results/ecmp_baseline.png",
+      "alt": "Two panels: CDFs of mouse completion time split by 0 to 3 elephants on the uplink, and elephant goodput clustering at about 8.7, 4.4 and 3.1 Mbit/s for 1, 2 and 3 sharing elephants."
+    },
+    {
+      "id": "loaded-move",
+      "chunk": 3,
+      "kind": "line",
+      "title": "Moving an elephant onto a loaded path",
+      "src": "results/loaded_move_timeseries.png",
+      "caption": "E0 moved onto spine s1, idle (dashed) or shared with elephant B (solid), mean over 10 runs per condition. With B present, E0 settles above the no-gap move and B drops; E0’s cwnd is cut from about 25 to 8 at the move.",
+      "alt": "Three stacked time series: E0 goodput, B goodput and E0 cwnd around a move at t = 0, for five conditions.",
+      "script": "analysis/loaded_move.py → figures/loaded_move_timeseries.png"
+    },
+    {
+      "id": "loaded-move-default",
+      "chunk": 3,
+      "kind": "line",
+      "title": "The same move with the TSQ artifact left in",
+      "src": "results/loaded_move_timeseries_default_qdisc.png",
+      "caption": "Ablation with the Chunk 2 host queue setting. The split is fixed within milliseconds of the move and E0 loses about half its throughput, with almost no loss and a frozen cwnd. This is what an uncorrected Mininet study would report.",
+      "alt": "Same three panels as the previous figure, but E0 settles far below B after the move and cwnd stays flat.",
+      "script": "analysis/loaded_move.py → figures/loaded_move_timeseries_default_qdisc.png"
+    },
+    {
       "id": "gate-table",
       "chunk": 2,
       "kind": "bars",
       "title": "Damage per move at the gate",
       "caption": "Per-move damage counters with 95% CIs (retransmissions, DSACKs, reorder events, RTOs, cwnd). The numbers are in the table above; a plotted version comes with the Chunk 3 analysis pass.",
       "script": "analysis/gate.py",
-      "src": null
-    },
-    {
-      "id": "ecmp-spread",
-      "chunk": 3,
-      "kind": "bars",
-      "title": "ECMP spreading across spines",
-      "caption": "Bytes per select-group bucket from dump-group-stats, showing how often elephants collide under hashing.",
-      "script": "experiments/run_ecmp.py",
       "src": null
     },
     {
@@ -128,76 +149,146 @@
       "src": null
     }
   ],
-  "sofar": {
-    "title": "Chunk 2: a reroute does measurable damage, and it is small on an idle path",
-    "verdict": "PASS, with a caveat",
-    "summary": "A single 10 Mbit/s TCP flow was moved between spines once, with one OFPFC_MODIFY_STRICT on the ingress leaf, and watched for 2 s after the flow-mod’s barrier reply. Every slow-to-fast move produced reordering and spurious retransmissions; no control did. The goodput lost in those 2 s was 0.29% at a 4 ms delay gap and 2.81% at a 9 ms gap. The cause is the one the proposal predicted: packets on the new, faster path overtake packets still on the old one, the sender retransmits segments that were never lost, and cwnd is cut. In all 80 trials the kernel never undid that cut. With one flow on an idle path the cut costs almost nothing, which is the caveat. Chunk 3 tests the same mechanism with competing flows.",
-    "table": {
-      "columns": [
-        "Condition",
-        "Move",
-        "Trials with reorder / spurious event",
-        "Goodput deficit in 2 s vs control",
-        "95% CI (Mbit/s)",
-        "cwnd before → min"
-      ],
-      "rows": [
-        [
-          "R1",
-          "slow→fast, 4 ms gap (s3→s1)",
-          "10 / 10",
-          "6.9 KB (0.29%)",
-          "[0.015, 0.040]",
-          "35 → 28"
+  "results_so_far": [
+    {
+      "chunk": 3,
+      "title": "Chunk 3: ECMP baseline, and a move onto a loaded path helps the mover and hurts the bystander",
+      "verdict": "Finish line met · two findings change the method",
+      "summary": "ECMP with OpenFlow 1.3 select groups now runs through a reusable, seeded runner (10 seeds, 30 s each, 4 elephants and about 1050 mice per run). Hash collisions decide everything: an elephant alone on its uplink gets 8.70 Mbit/s, two sharing get 4.42 each, three get 3.09. Mice complete in 50.8 ms at the median but 1210 ms at p99, mostly lost handshakes. Then a deliberate move of elephant E0 from a slow spine onto a fast spine already carrying elephant B gave the opposite of the pre-registered prediction: E0 gained 13% over a no-gap move, B lost 17%, and total goodput on the shared path barely changed. Along the way the runner caught an emulation artifact (TCP Small Queues counting the emulated switch queue) that, left in place, flips that result to a 47% loss for the moved flow.",
+      "table": {
+        "columns": [
+          "Measurement",
+          "Result",
+          "Where it comes from"
         ],
-        [
-          "R2",
-          "slow→fast, 9 ms gap (s4→s1)",
-          "10 / 10",
-          "67.1 KB (2.81%)",
-          "[0.008, 0.529]",
-          "43 → 22"
-        ],
-        [
-          "R0",
-          "fast→fast, no gap (s1→s2)",
-          "10 / 10",
-          "7.5 KB (0.32%)",
-          "[0.024, 0.036]",
-          "20 → 19"
-        ],
-        [
-          "R3",
-          "fast→slow, 4 ms gap (s1→s3)",
-          "10 / 10",
-          "5.0 KB (0.21%)",
-          "[0.010, 0.030]",
-          "22 → 22"
-        ],
-        [
-          "R4",
-          "fast→slow, 9 ms gap (s1→s4)",
-          "2 / 10",
-          "1.1 KB (0.05%)",
-          "[0.000, 0.009]",
-          "21 → 38"
-        ],
-        [
-          "C1, C3, C4",
-          "no reroute (controls on 1, 5 and 10 ms spines)",
-          "0 / 30",
-          "control",
-          "",
-          "unchanged"
+        "rows": [
+          [
+            "Elephant goodput by elephants sharing its uplink (1 / 2 / 3)",
+            "8.70 / 4.42 / 3.09 Mbit/s",
+            "results/ecmp/ecmp-2026-10-19/summary.md"
+          ],
+          [
+            "Elephant goodput per run, mean of 4 / worst of 4",
+            "6.16 ± 0.93 / 4.23 ± 1.16 Mbit/s",
+            "same"
+          ],
+          [
+            "Mice flow completion time, p50 / p99",
+            "50.8 ± 5.8 / 1210 ± 100 ms (p99 is mostly 1 s SYN timeouts, 2.3% of mice)",
+            "same"
+          ],
+          [
+            "Mice spread across the 4 spines",
+            "2596 / 2617 / 2657 / 2662, chi-square p = 0.76; no flow ever changed spine",
+            "same"
+          ],
+          [
+            "Seed replay (seeds 1 to 3)",
+            "same schedule hash, same spine for 3169 / 3169 flows",
+            "same"
+          ],
+          [
+            "Loaded move, moved flow E0: slow→fast (9 ms gap) vs fast→fast, 10 s window",
+            "−0.64 Mbit/s [−0.96, −0.32], i.e. E0 gained 13%",
+            "results/loaded/loaded-2026-10-19/summary.md"
+          ],
+          [
+            "Loaded move, bystander B: slow→fast vs no move, 10 s window",
+            "+0.86 Mbit/s [0.50, 1.22], i.e. B lost 17%",
+            "same"
+          ],
+          [
+            "Loaded move, E0 + B total: slow→fast vs no move",
+            "−0.03 Mbit/s [−0.04, −0.01], essentially flat",
+            "same"
+          ],
+          [
+            "Same move with the old host queue setting (TSQ artifact present)",
+            "+2.46 Mbit/s [1.77, 3.14]: E0 loses 47% instead",
+            "results/loaded/loaded-default-2026-10-19/summary.md"
+          ]
         ]
-      ]
+      },
+      "notes": [
+        "Methods finding: in Mininet, packets sitting in the emulated switch queue stay charged to the sending socket, so TCP Small Queues caps each flow at a few packets in the switch. The bottleneck never fills, there is almost no loss, and cwnd stops deciding the rate (packets out / cwnd 0.5 to 0.67, 27 drops in 10 s). A 10 µs netem qdisc on every host NIC frees the packet as it leaves the host, like a real NIC (packets out / cwnd 1.00, 118 drops). Every run from Chunk 3 on uses it; Chunk 2 stays as recorded.",
+        "Why the sign flipped: E0 arrives from the 10 ms path with a larger cwnd (25 vs 19 segments) and keeps a larger one afterwards, so it takes share from B. Reordering still happens (events in 9 of 10 runs) and cwnd is still cut (25 to 8), but the cut lands on a flow that starts ahead. This is an inference from the counters, not a tested mechanism.",
+        "Damage is now defined with three terms, from Chunk 4 on: the moved flow’s deficit, the deficit of the flows already on the destination path, and the total goodput lost on that path, each against its matched no-move control. The moved-flow-only number stays as a reported column to show why it fails under load.",
+        "Max link utilisation is 1.0 in every ECMP run, so it will not separate controllers; elephant goodput and mice FCT will. Every number here was recomputed from the raw data by an independent agent with its own code and confirmed."
+      ],
+      "source": "STATUS.md and LOG.md (Chunk 3 sections) on main; raw data in results/ecmp/, results/loaded/ and results/tsq/."
     },
-    "notes": [
-      "Retransmissions after a move are almost all spurious: the retransmitted-segment count matches the DSACK count in every reroute condition (R1 5.2 vs 5.0, R2 8.6 vs 6.3, R0 5.2 vs 5.2, R3 3.0 vs 3.0 per move).",
-      "R2’s deficit is dominated by 3 of 10 trials that hit a retransmission timeout; the other 7 lose 10.8 KB each (post-hoc table in verdict.md, not part of the verdict).",
-      "Steady goodput before every move was 9.564 Mbit/s of 10. Flow-mod to barrier reply took a median of 1.15 ms, so the move itself drops nothing; the damage is TCP behaviour.",
-      "A second run of R2 and C1 as root on the system Open vSwitch agreed with the rootless campaign."
-    ],
-    "source": "results/gate/gate-2026-10-19/verdict.md, generated by analysis/gate.py; raw per-trial data in the same folder."
-  }
+    {
+      "title": "Chunk 2: a reroute does measurable damage, and it is small on an idle path",
+      "verdict": "PASS, with a caveat",
+      "summary": "A single 10 Mbit/s TCP flow was moved between spines once, with one OFPFC_MODIFY_STRICT on the ingress leaf, and watched for 2 s after the flow-mod’s barrier reply. Every slow-to-fast move produced reordering and spurious retransmissions; no control did. The goodput lost in those 2 s was 0.29% at a 4 ms delay gap and 2.81% at a 9 ms gap. The cause is the one the proposal predicted: packets on the new, faster path overtake packets still on the old one, the sender retransmits segments that were never lost, and cwnd is cut. In all 80 trials the kernel never undid that cut. With one flow on an idle path the cut costs almost nothing, which is the caveat. Chunk 3 tests the same mechanism with competing flows.",
+      "table": {
+        "columns": [
+          "Condition",
+          "Move",
+          "Trials with reorder / spurious event",
+          "Goodput deficit in 2 s vs control",
+          "95% CI (Mbit/s)",
+          "cwnd before → min"
+        ],
+        "rows": [
+          [
+            "R1",
+            "slow→fast, 4 ms gap (s3→s1)",
+            "10 / 10",
+            "6.9 KB (0.29%)",
+            "[0.015, 0.040]",
+            "35 → 28"
+          ],
+          [
+            "R2",
+            "slow→fast, 9 ms gap (s4→s1)",
+            "10 / 10",
+            "67.1 KB (2.81%)",
+            "[0.008, 0.529]",
+            "43 → 22"
+          ],
+          [
+            "R0",
+            "fast→fast, no gap (s1→s2)",
+            "10 / 10",
+            "7.5 KB (0.32%)",
+            "[0.024, 0.036]",
+            "20 → 19"
+          ],
+          [
+            "R3",
+            "fast→slow, 4 ms gap (s1→s3)",
+            "10 / 10",
+            "5.0 KB (0.21%)",
+            "[0.010, 0.030]",
+            "22 → 22"
+          ],
+          [
+            "R4",
+            "fast→slow, 9 ms gap (s1→s4)",
+            "2 / 10",
+            "1.1 KB (0.05%)",
+            "[0.000, 0.009]",
+            "21 → 38"
+          ],
+          [
+            "C1, C3, C4",
+            "no reroute (controls on 1, 5 and 10 ms spines)",
+            "0 / 30",
+            "control",
+            "",
+            "unchanged"
+          ]
+        ]
+      },
+      "notes": [
+        "Retransmissions after a move are almost all spurious: the retransmitted-segment count matches the DSACK count in every reroute condition (R1 5.2 vs 5.0, R2 8.6 vs 6.3, R0 5.2 vs 5.2, R3 3.0 vs 3.0 per move).",
+        "R2’s deficit is dominated by 3 of 10 trials that hit a retransmission timeout; the other 7 lose 10.8 KB each (post-hoc table in verdict.md, not part of the verdict).",
+        "Steady goodput before every move was 9.564 Mbit/s of 10. Flow-mod to barrier reply took a median of 1.15 ms, so the move itself drops nothing; the damage is TCP behaviour.",
+        "A second run of R2 and C1 as root on the system Open vSwitch agreed with the rootless campaign."
+      ],
+      "source": "results/gate/gate-2026-10-19/verdict.md, generated by analysis/gate.py; raw per-trial data in the same folder.",
+      "chunk": 2
+    }
+  ]
 }
