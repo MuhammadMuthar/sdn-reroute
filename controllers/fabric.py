@@ -114,11 +114,11 @@ class FabricController(app_manager.OSKenApp):
         self.logger.info("switch %016x configured (%d/%d)", dp.id, len(self.dps),
                          len(self.leaf_of_dpid) + len(self.spine_of_dpid))
 
-    def _flow(self, dp, prio, match, actions, command=None):
+    def _flow(self, dp, prio, match, actions, command=None, cookie=0, idle_timeout=0):
         ofp, parser = dp.ofproto, dp.ofproto_parser
         inst = [parser.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS, actions)]
         mod = parser.OFPFlowMod(datapath=dp, priority=prio, match=match,
-                                instructions=inst,
+                                instructions=inst, cookie=cookie, idle_timeout=idle_timeout,
                                 command=ofp.OFPFC_ADD if command is None else command)
         dp.set_xid(mod)
         dp.send_msg(mod)
@@ -153,7 +153,9 @@ class FabricController(app_manager.OSKenApp):
                                ipv4_dst=f["dst"], tcp_src=int(f["sport"]),
                                tcp_dst=int(f["dport"]))
 
-    def set_path(self, f, spine, modify, origin="runner"):
+    def set_path(self, f, spine, modify, origin="runner", extra=None):
+        """`extra` (dict) is stored with the path_log entry, e.g. a policy's
+        round number and the spine the flow left."""
         leaf = self.by_ip[f["src"]]["leaf"]
         dp = self.dps[self.lay["leaf_dpid"][leaf]]
         ofp, parser = dp.ofproto, dp.ofproto_parser
@@ -169,7 +171,7 @@ class FabricController(app_manager.OSKenApp):
         if err:
             rep["of_error"] = err
         self.path_log.append(dict(rep, cmd="move" if modify else "pin", flow=f,
-                                origin=origin))
+                                origin=origin, **(extra or {})))
         return rep
 
     # ---- command channel ---------------------------------------------------

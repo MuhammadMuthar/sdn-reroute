@@ -23,6 +23,10 @@ Definitions
                     window [3 s, duration - 1 s] after t0; max_link_util is the
                     largest per-uplink mean, peak_bin_util the largest bin
   fast / slow       spines 1-2 (1 ms) / spines 3-4 (5 and 10 ms one way)
+  reroute           a move the controller's own policy made (meta controller_events,
+                    origin "policy", flow-mod ok); reroutes_per_min over the run's
+                    duration; flaps as defined in experiments/moves.py
+  reorder events    sum over left hosts of REORDER_CTRS deltas, start to end
 """
 
 import glob
@@ -35,10 +39,18 @@ import sys
 import numpy as np
 import pandas as pd
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from experiments.moves import FLAP_WINDOW_S, policy_moves  # noqa: E402,F401
+
 FAST = {1, 2}
 HOST_CTRS = ["TcpRetransSegs", "TcpExtTCPDSACKRecv", "TcpExtTCPSACKReorder",
              "TcpExtTCPTSReorder", "TcpExtTCPTimeouts", "TcpExtTCPSpuriousRTOs",
-             "TcpExtTCPLossUndo", "TcpExtTCPDSACKUndo", "TcpExtTCPFastRetrans"]
+             "TcpExtTCPLossUndo", "TcpExtTCPDSACKUndo", "TcpExtTCPFastRetrans",
+             "TcpExtTCPRenoReorder"]
+# reorder / spurious-retransmission evidence at a sender (the gate's event set)
+REORDER_CTRS = ["TcpExtTCPDSACKRecv", "TcpExtTCPSACKReorder", "TcpExtTCPTSReorder",
+                "TcpExtTCPRenoReorder", "TcpExtTCPSpuriousRTOs"]
+SIZE_CLASSES = (("lt10k", 0, 10e3), ("10k_100k", 10e3, 100e3), ("ge100k", 100e3, 1e12))
 RCV_CTRS = ["TcpExtTCPOFOQueue", "TcpExtTCPDSACKOldSent"]
 
 
@@ -67,6 +79,42 @@ def iperf_end(path):
     except (ValueError, OSError):
         return None
     return j.get("end") or None
+
+
+def policy_log_stats(rd):
+    p = os.path.join(rd, "policy_log.jsonl")
+    if not os.path.exists(p) and os.path.exists(p + ".gz"):
+        p += ".gz"
+    if not os.path.exists(p):
+        return {}
+    rounds = []
+    for line in (gzip.open(p, "rt") if p.endswith(".gz") else open(p)):
+        r = json.loads(line)
+        if r.get("kind") == "round":
+            rounds.append(r)
+    if not rounds:
+        return dict(ctl_rounds=0)
+    cm = np.array([r["collect_ms"] for r in rounds])
+    return dict(ctl_rounds=len(rounds), ctl_collect_ms_p50=float(np.percentile(cm, 50)),
+                ctl_collect_ms_max=float(cm.max()),
+                ctl_missing_replies=int(sum(r["missing_replies"] for r in rounds)),
+                ctl_packet_in=int(rounds[-1]["n_packet_in"]),
+                ctl_max_tracked=int(max(r["n_tracked"] for r in rounds)))
+
+
+def iperf_steady(path, lo=5.0, hi=29.0):
+    """Mean receiver goodput (Mbit/s) over iperf3 intervals inside [lo, hi] s."""
+    if not os.path.exists(path) and os.path.exists(path + ".gz"):
+        path += ".gz"
+    try:
+        j = json.load(gzip.open(path, "rt") if path.endswith(".gz") else open(path))
+    except (ValueError, OSError):
+        return np.nan
+    iv = [i["sum"] for i in j.get("intervals", []) if i["sum"]["start"] >= lo - 1e-6
+          and i["sum"]["end"] <= hi + 1e-6]
+    if not iv:
+        return np.nan
+    return sum(i["bytes"] for i in iv) * 8 / sum(i["seconds"] for i in iv) / 1e6
 
 
 def run_metrics(rd):
@@ -102,7 +150,9 @@ def run_metrics(rd):
         if end is not None:
             rcv = end["sum_received"]
             row.update(goodput_mbps=rcv["bytes"] * 8 / rcv["seconds"] / 1e6,
-                       bytes=rcv["bytes"], retrans=end["sum_sent"].get("retransmits"))
+                       bytes=rcv["bytes"], retrans=end["sum_sent"].get("retransmits"),
+                       goodput_steady_mbps=iperf_steady(
+                           os.path.join(rd, "iperf_server_%s.json" % e["id"])))
         row.update(paths(e["src_ip"], e["dst_ip"], e["sport"], e["dport"]))
         rows.append(row)
         known.add((e["src_ip"], e["dst_ip"], e["sport"], e["dport"]))
@@ -166,7 +216,9 @@ def run_metrics(rd):
         g = el.goodput_mbps
         s.update(eleph_goodput_mean=g.mean(), eleph_goodput_min=g.min(),
                  eleph_goodput_max=g.max(), eleph_goodput_sum=g.sum(),
-                 eleph_retrans_sum=el.retrans.sum())
+                 eleph_retrans_sum=el.retrans.sum(),
+                 eleph_goodput_steady_mean=el.goodput_steady_mbps.mean(),
+                 eleph_goodput_steady_min=el.goodput_steady_mbps.min())
         per = el.spine.value_counts()
         s.update(elephant_spines=";".join("%s:s%d" % (i, sp) for i, sp in
                                           zip(el.id, el.spine.fillna(0).astype(int))),
@@ -192,6 +244,14 @@ def run_metrics(rd):
             s["fct_p50_ms" + lab] = float(np.percentile(sub.fct_c, 50) * 1e3)
             s["fct_p99_ms" + lab] = float(np.percentile(sub.fct_c, 99) * 1e3)
             s["fct_mean_ms" + lab] = float(sub[sub.ok == 1].fct_s.mean() * 1e3)
+    for lab, lo, hi in SIZE_CLASSES:
+        sub = cens[(cens["size"] >= lo) & (cens["size"] < hi)] if len(cens) else cens
+        s["n_mice_" + lab] = int(len(sub))
+        if len(sub):
+            s["fct_p50_ms_" + lab] = float(np.percentile(sub.fct_c, 50) * 1e3)
+            s["fct_p99_ms_" + lab] = float(np.percentile(sub.fct_c, 99) * 1e3)
+    if len(mi):
+        s["mice_connect_gt_0p9s_frac"] = float((mi.connect_s > 0.9).mean())
     for k in range(1, 5):
         n = int((mi.spine == k).sum()) if len(mi) else 0
         s["mice_on_s%d" % k] = n
@@ -208,6 +268,22 @@ def run_metrics(rd):
     for name in RCV_CTRS:
         s["rcv_" + name] = sum(c["end"][h].get(name, 0) - c["start"][h].get(name, 0)
                                for h in sched["hosts"] if int(h[1:]) > hpl)
+    s["snd_reorder_events"] = sum(s["snd_" + n] for n in REORDER_CTRS)
+    mv = policy_moves(meta, sched)
+    mins = D / 60.0
+    s.update(n_reroutes=len(mv), reroutes_per_min=len(mv) / mins,
+             n_rerouted_flows=len({m["key"] for m in mv}),
+             n_reroutes_elephant=sum(1 for m in mv if m["flow_id"]),
+             n_reroutes_other=sum(1 for m in mv if not m["flow_id"]),
+             n_reroute_rounds=len({m["round"] for m in mv}),
+             n_flaps=sum(m["flap"] for m in mv),
+             flaps_per_min=sum(m["flap"] for m in mv) / mins,
+             t_first_reroute_s=mv[0]["t"] if mv else np.nan,
+             t_last_reroute_s=mv[-1]["t"] if mv else np.nan,
+             reroutes=";".join("%.3f:%s:s%d>s%d" % (m["t"], m["flow_id"] or
+                                                    "%s:%d" % (m["key"][0], m["key"][2]),
+                                                    m["from_spine"], m["to_spine"]) for m in mv))
+    s.update(policy_log_stats(rd))
     gb = group_buckets(os.path.join(rd, "ovs_stats.txt"))
     for (sw, b), (p, by) in sorted(gb.items()):
         s["group_%s_bucket%d_bytes" % (sw, b)] = by

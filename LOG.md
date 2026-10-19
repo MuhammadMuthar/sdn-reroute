@@ -550,3 +550,64 @@ snapshot exists, seed 1 placement unchanged (E1:s2 E2:s1 E3:s2 E4:s2). One
 bug found by the smoke test and fixed: the censored-FCT code failed on runs
 without mice. All four campaigns' per-run metrics and CSVs were regenerated
 with the final metrics.py; the ECMP runs.csv files came out byte-identical.
+
+## 2026-10-19 Chunk 4 (part 1, stopped at the usage limit): controllers and runner
+
+Remote Control session on the laptop, Opus 5.5. Stopped before any campaign;
+nothing below is a result, the pilot numbers are dev runs (results/*/dev-*,
+not committed).
+
+### Built
+- `controllers/hedera.py`: Hedera-style greedy on top of ECMP (docstring has
+  the full spec and what was dropped from Hedera). Monitoring: a prio-20 leaf
+  rule copies every SYN (tcp_flags=+syn-ack) to the controller while it still
+  goes through the select group; on that packet-in a prio-150 5-tuple counting
+  rule with the same group action (idle 5 s); spine counting rules once a flow
+  passes 1 Mbit/s (they tell which dp_hash bucket it got); flow + port stats
+  every 1 s, rates from duration deltas, path load = leaf uplink tx rate.
+  Policy per round, most loaded path first: q* = least-loaded other uplink,
+  gain = U_p - (U_q* + r_f); greedy moves if gain > 0; loads updated within
+  the round. `controllers/cooldown.py` (gain > 1 Mbit/s and no move of that
+  flow in the last 5 s; never-moved flows eligible at once) and
+  `controllers/ecmp_mon.py` (same monitoring, never moves) are flag subclasses.
+  Every move is in path_log (origin policy) and in policy_log.jsonl with its
+  pre-move features. These parameters are the proposal to pre-register.
+- `experiments/runner.py`: `campaign --controllers a,b,c` (block-randomised
+  per seed; one controller keeps Chunk 3's order, checked against
+  loaded-2026-10-19/plan.json), moves with the same time run as one batch,
+  `replay --spec` mode, the controller gets FABRIC_LOG_DIR, boot_id in
+  plan.json, shutdown timing steps.
+- `experiments/moves.py` (reroutes and flaps: A -> B -> A within 10 s),
+  `experiments/metrics.py` (reroutes/min, flaps/min, reorder events, FCT by
+  size class, steady-window goodput, controller timing).
+- `experiments/replay.py`: for every policy round that moved an elephant, a
+  move run T (pre-move placement pinned, same flow-mods at the same time) and
+  a matched no-move run C (post-move placement pinned, sham flow-mods), same
+  seed, all elephants tagged. Damage terms come from C minus T.
+
+### Pilot observations (dev runs, same boot as Chunk 3)
+- SYN and data of every flow on the same spine (1058 / 1058); the controller's
+  view of each moved elephant's path matched the uplink captures.
+- ecmp_mon seed 2 reproduced Chunk 3 ECMP seed 2: same placement, goodput
+  4.40 vs 4.42 Mbit/s, FCT p50 41.4 vs 40.8 ms.
+- hedera seed 1: 3 moves in 2 rounds (1.8 s, 2.8 s), one elephant per uplink
+  after that, mean / worst elephant goodput 8.49 / 8.34 (ECMP 4.46 / 2.83),
+  but mice FCT p50 69 vs 41 ms, because no uplink is left elephant-free. One
+  of the moves took a lone elephant off s1 only because s1's mice made it
+  look busier than empty s3 (gain 1.4 Mbit/s); cooldown seed 2: 2 moves, 1 round.
+- OVS updates OpenFlow rule counters from the datapath about every 0.5 s, so
+  1 s per-flow rates have sd 0.4-0.7 Mbit/s in steady state and spike up to
+  14 Mbit/s right after a move; port counters are exact. Kept OVS defaults.
+- Runs take about 89 s instead of 68 s; the new runner steps will show where.
+
+### Open point for the write-up
+"moved + bystanders + lost total on the destination path" counts the moved
+flow and the bystanders twice if summed, because the path total already
+contains them. Proposal: report the three terms, and use the destination-path
+total (moved + bystanders) as the single damage number.
+
+### Next session (in order)
+1. Pre-register the analysis plan here; independent code review.
+2. `python3 experiments/runner.py campaign --controllers ecmp,ecmp_mon,hedera,cooldown --scenario ecmp_mixed --runs 10 --seed 1 --out results/compare/compare-<date>` (about 1 h).
+3. `python3 experiments/replay.py --live results/compare/compare-<date> --out results/damage/damage-<date>/jobs.json`, then `runner.py replay --spec ... --out results/damage/damage-<date>` (about 2 runs per event).
+4. Write `analysis/stage2.py` (not started), figures, independent recomputation, STATUS.md.

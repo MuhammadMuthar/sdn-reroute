@@ -26,12 +26,18 @@ under sudo it runs on the system OVS with `mn -c` first):
       --runs 10 --seed 1 --out results/ecmp/<name>
   python3 experiments/runner.py campaign --controller ecmp --scenario loaded_move \\
       --conditions IC1,IR2,LC1,LR2,LR0 --runs 10 --seed 1 --out results/loaded/<name>
-Run r of a campaign uses seed + r - 1; with --conditions every condition of
-rep r uses that same seed (paired), in a block-randomised order.
+  python3 experiments/runner.py campaign --controllers ecmp,ecmp_mon,hedera,cooldown \\
+      --scenario ecmp_mixed --runs 10 --seed 1 --out results/compare/<name>
+  python3 experiments/runner.py replay --spec <jobs.json> --out results/damage/<name>
+Run r of a campaign uses seed + r - 1; with --conditions (and/or --controllers)
+every condition and controller of rep r uses that same seed (paired), in a
+block-randomised order. `replay` runs fully specified schedules (matched move /
+no-move pairs built by experiments/replay.py).
 """
 
 import argparse
 import csv
+import hashlib
 import json
 import os
 import random
@@ -116,7 +122,7 @@ def run(a):
                             os.path.join(REPO, "controllers", a.controller + ".py")],
                            stdout=ctl_log, stderr=subprocess.STDOUT,
                            env=dict(os.environ, FABRIC_CMD_PORT=str(CMD_PORT),
-                                    FABRIC_HOSTS_PER_LEAF=str(hpl)))
+                                    FABRIC_HOSTS_PER_LEAF=str(hpl), FABRIC_LOG_DIR=rd))
     bg, dumps, clients = [], [], []
     counters = {}
     net = None
@@ -252,20 +258,28 @@ def run(a):
                 stderr=subprocess.STDOUT))
         step("elephants started")
         meta["moves"] = []
-        for i, mv in enumerate(sorted(sched["moves"], key=lambda m: m["at"])):
-            e = eleph[mv["flow"]]
+        # moves with the same `at` are one batch: their flow-mods go out back to
+        # back (as a controller round does) and the snapshots bracket the batch
+        batches = {}
+        for mv in sched["moves"]:
+            batches.setdefault(mv["at"], []).append(mv)
+        for i, at in enumerate(sorted(batches)):
             for off in sorted(o for o in sched["snapshots"] if o < 0):
-                time.sleep(max(0.0, t0 + mv["at"] + off - time.time()))
+                time.sleep(max(0.0, t0 + at + off - time.time()))
                 snap("m%d_%+g" % (i, off))
-            time.sleep(max(0.0, t0 + mv["at"] - time.time()))
+            time.sleep(max(0.0, t0 + at - time.time()))
             snap("m%d_pre" % i)
-            r = ctl_cmd({"cmd": "move", "flow": flow_tuple(e), "spine": mv["spine"]})
-            if not r.get("ok"):
-                meta["errors"].append("move failed: %s" % r)
-            meta["moves"].append(dict(mv, reply=r))
-            tb = r.get("t_barrier", time.time())
+            tb = None
+            for mv in batches[at]:
+                e = eleph[mv["flow"]]
+                r = ctl_cmd({"cmd": "move", "flow": flow_tuple(e), "spine": mv["spine"]})
+                if not r.get("ok"):
+                    meta["errors"].append("move failed: %s" % r)
+                meta["moves"].append(dict(mv, reply=r, batch=i))
+                tb = tb or r.get("t_barrier")
+                step("moved %s -> s%d" % (mv["flow"], mv["spine"]))
+            tb = tb or time.time()
             snap("m%d_post0" % i)                # counter windows can start here
-            step("moved %s -> s%d" % (mv["flow"], mv["spine"]))
             for off in sorted(o for o in sched["snapshots"] if o > 0):
                 time.sleep(max(0.0, tb + off - time.time()))
                 snap("m%d_%+g" % (i, off))
@@ -293,6 +307,7 @@ def run(a):
         else:
             meta["errors"].append("tcpdump did not exit")
 
+        step("captures stopped")
         meta["controller_events"] = ctl_cmd({"cmd": "events"}).get("events")
         with open(os.path.join(rd, "ovs_stats.txt"), "w") as f:
             for sw in net.switches:
@@ -321,13 +336,16 @@ def run(a):
                     p.kill()
                 except OSError:
                     pass
+        step("stats saved, stopping")
         if net is not None:
             net.stop()
+        step("network stopped")
         ctl.terminate()
         try:
             ctl.wait(timeout=5)
         except subprocess.TimeoutExpired:
             ctl.kill()
+        step("controller stopped")
         ctl_log.close()
         meta["t_wall_end"] = time.time()
         with open(os.path.join(rd, "meta.json"), "w") as f:
@@ -361,54 +379,87 @@ def postprocess(rd):
     subprocess.run([VENV_PY, os.path.join(REPO, "experiments", "metrics.py"), "run", rd],
                    check=True)
     big = [os.path.join(rd, f) for f in os.listdir(rd)
-           if f.startswith(("ss_", "iperf_")) and f.endswith((".log", ".json"))]
+           if f.startswith(("ss_", "iperf_", "policy_log")) and
+           f.endswith((".log", ".json", ".jsonl"))]
     if big:                                  # kept (committed), just compressed
         subprocess.run(["gzip", "-f"] + big, check=True)
 
 
 def campaign(a):
+    """Seeded campaign: every condition (and, with --controllers, every
+    controller) of rep r uses seed + r - 1, in a block-randomised order."""
     from experiments.traffic import make_schedule, resolve, schedule_sha256
     conds = a.conditions.split(",") if a.conditions else [""]
+    ctrls = a.controllers.split(",") if a.controllers else [a.controller]
+    multi = bool(a.controllers)
     rng = random.Random(a.seed * 7919 + 17)
     order = []
     for rep in range(1, a.runs + 1):            # block-randomised, paired seeds
-        block = list(conds)
-        rng.shuffle(block)
-        order += [(rep, c) for c in block]
+        block = [(c, k) for k in ctrls for c in conds]
+        rng.shuffle(block)                      # one controller: same order as Chunk 3
+        order += [(rep, c, k) for c, k in block]
+    jobs = []
+    for rep, c, k in order:
+        run_id = "%s%s%sr%02d" % (k + "-" if multi else "", c, "-" if c else "", rep)
+        jobs.append(dict(run_id=run_id, controller=k, condition=c, rep=rep,
+                         seed=a.seed + rep - 1,
+                         make=lambda c=c, rep=rep: make_schedule(resolve(a.scenario, c or None),
+                                                                 a.seed + rep - 1)))
+    plan = dict(controller=a.controller, controllers=ctrls, scenario=a.scenario,
+                conditions=conds, runs=a.runs, seed=a.seed,
+                order=[[rep, c, k] if multi else [rep, c] for rep, c, k in order])
+    execute(a, plan, jobs, schedule_sha256)
+
+
+def replay(a):
+    """Runs whose schedules are given in full (experiments/replay.py writes
+    them: matched move / no-move pairs for the moves a controller made)."""
+    from experiments.traffic import schedule_sha256
+    spec = json.load(open(a.spec))
+    jobs = [dict(run_id=j["run_id"], controller=j["controller"], condition=j["condition"],
+                 rep=j.get("rep", 0), seed=j["schedule"]["seed"],
+                 make=lambda j=j: j["schedule"]) for j in spec["jobs"]]
+    plan = dict(controller=None, controllers=sorted({j["controller"] for j in jobs}),
+                scenario="replay", spec=os.path.abspath(a.spec),
+                spec_sha256=hashlib.sha256(open(a.spec, "rb").read()).hexdigest(),
+                source=spec.get("source"), runs=len(jobs), seed=None,
+                order=[j["run_id"] for j in jobs])
+    execute(a, plan, jobs, schedule_sha256)
+
+
+def execute(a, plan, jobs, schedule_sha256):
     os.makedirs(a.out, exist_ok=True)
-    plan = dict(controller=a.controller, scenario=a.scenario, conditions=conds,
-                runs=a.runs, seed=a.seed, order=order, queue_pkts=a.queue, mbps=a.mbps,
-                host_qdisc=a.host_qdisc,
+    plan.update(queue_pkts=a.queue, mbps=a.mbps, host_qdisc=a.host_qdisc,
                 started=time.strftime("%Y-%m-%dT%H:%M:%S%z"), host=os.uname().nodename,
                 kernel=os.uname().release, euid=os.geteuid(), argv=sys.argv,
+                boot_id=open("/proc/sys/kernel/random/boot_id").read().strip(),
                 host_default_qdisc=open("/proc/sys/net/core/default_qdisc").read().strip())
     plan_path = os.path.join(a.out, "plan.json")
     if not os.path.exists(plan_path):
         json.dump(plan, open(plan_path, "w"), indent=1)
     root = os.geteuid() == 0
     index = os.path.join(a.out, "trials.csv")
-    for i, (rep, c) in enumerate(order, 1):
-        seed = a.seed + rep - 1
-        run_id = "%s%sr%02d" % (c, "-" if c else "", rep)
+    for i, j in enumerate(jobs, 1):
+        run_id = j["run_id"]
         rd = os.path.join(a.out, "runs", run_id)
         if os.path.exists(os.path.join(rd, "run_flows.csv")):
-            print("[%d/%d] %s exists, skipping" % (i, len(order), run_id), flush=True)
+            print("[%d/%d] %s exists, skipping" % (i, len(jobs), run_id), flush=True)
             continue
         if os.path.exists(rd):                 # a failed earlier attempt: start clean
             shutil.rmtree(rd)
         os.makedirs(rd, exist_ok=True)
-        sched = make_schedule(resolve(a.scenario, c or None), seed)
+        sched = j["make"]()
         sched["sha256"] = schedule_sha256(sched)
         json.dump(sched, open(os.path.join(rd, "schedule.json"), "w"), indent=1)
         cmd = [sys.executable, os.path.abspath(__file__), "run", "--run-dir", rd,
-               "--controller", a.controller, "--queue", str(a.queue), "--mbps", str(a.mbps),
+               "--controller", j["controller"], "--queue", str(a.queue), "--mbps", str(a.mbps),
                "--host-qdisc", a.host_qdisc]
         if root:
             subprocess.run(["mn", "-c"], capture_output=True)
         else:
             cmd = [os.path.join(REPO, "scripts", "userns.sh")] + cmd
         t = time.time()
-        print("[%d/%d] %s seed %d ..." % (i, len(order), run_id, seed), end=" ", flush=True)
+        print("[%d/%d] %s seed %d ..." % (i, len(jobs), run_id, j["seed"]), end=" ", flush=True)
         with open(os.path.join(rd, "run.log"), "w") as log:
             rc = subprocess.run(cmd, stdout=log, stderr=subprocess.STDOUT, cwd=REPO).returncode
         if root and os.environ.get("SUDO_UID"):      # hand results back to the sudo user
@@ -425,8 +476,10 @@ def campaign(a):
         with open(index, "a", newline="") as f:
             w = csv.writer(f)
             if new:
-                w.writerow(["seq", "run_id", "condition", "rep", "seed", "status", "seconds"])
-            w.writerow([i, run_id, c, rep, seed, status, "%.1f" % (time.time() - t)])
+                w.writerow(["seq", "run_id", "condition", "rep", "seed", "status", "seconds",
+                            "controller"])
+            w.writerow([i, run_id, j["condition"], j["rep"], j["seed"], status,
+                        "%.1f" % (time.time() - t), j["controller"]])
         if rc != 0 and a.stop_on_error:
             sys.exit("stopping: run %s failed" % run_id)
     subprocess.run([VENV_PY, os.path.join(REPO, "experiments", "metrics.py"), "collect",
@@ -436,7 +489,7 @@ def campaign(a):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="mode", required=True)
-    for name in ("run", "campaign"):
+    for name in ("run", "campaign", "replay"):
         p = sub.add_parser(name)
         p.add_argument("--controller", default="ecmp",
                        help="controllers/<name>.py, a FabricController app")
@@ -448,17 +501,25 @@ def main():
         if name == "run":
             p.add_argument("--run-dir", required=True, help="holds schedule.json")
         else:
-            p.add_argument("--scenario", required=True)
-            p.add_argument("--conditions", default="", help="comma list, if the scenario has any")
-            p.add_argument("--runs", type=int, default=10)
-            p.add_argument("--seed", type=int, default=1)
             p.add_argument("--out", required=True)
             p.add_argument("--stop-on-error", action="store_true")
+        if name == "campaign":
+            p.add_argument("--scenario", required=True)
+            p.add_argument("--conditions", default="", help="comma list, if the scenario has any")
+            p.add_argument("--controllers", default="",
+                           help="comma list: every controller runs every seed, block-"
+                           "randomised per seed (run ids <controller>-r<rep>)")
+            p.add_argument("--runs", type=int, default=10)
+            p.add_argument("--seed", type=int, default=1)
+        if name == "replay":
+            p.add_argument("--spec", required=True, help="jobs JSON from experiments/replay.py")
     a = ap.parse_args()
     if a.mode == "run":
         run(a)
-    else:
+    elif a.mode == "campaign":
         campaign(a)
+    else:
+        replay(a)
 
 
 if __name__ == "__main__":
