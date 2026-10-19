@@ -62,19 +62,22 @@
     if (upd) upd.textContent = data.updated ? 'Last updated ' + data.updated : 'Last updated: never';
 
     var sofar = document.getElementById('sofar');
-    if (sofar && data.sofar) {
-      var sf = data.sofar;
-      var cols = (sf.table && sf.table.columns) || [];
-      var rows = (sf.table && sf.table.rows) || [];
+    var blocks = Array.isArray(data.results_so_far) ? data.results_so_far : (data.sofar ? [data.sofar] : []);
+    if (sofar && blocks.length) {
       sofar.hidden = false;
-      sofar.innerHTML =
-        '<div class="sofar-head"><span class="tag done">' + esc(sf.verdict) + '</span><h3>' + esc(sf.title) + '</h3></div>' +
-        '<p class="sofar-summary">' + esc(sf.summary) + '</p>' +
-        (rows.length ? '<div class="table-wrap"><table><thead><tr>' + cols.map(function (c) { return '<th>' + esc(c) + '</th>'; }).join('') + '</tr></thead><tbody>' +
-          rows.map(function (r) { return '<tr>' + r.map(function (c, i) { return '<td class="' + (i === 0 ? 'mono' : '') + '">' + esc(c) + '</td>'; }).join('') + '</tr>'; }).join('') +
-          '</tbody></table></div>' : '') +
-        (Array.isArray(sf.notes) && sf.notes.length ? '<ul class="sofar-notes">' + sf.notes.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') + '</ul>' : '') +
-        (sf.source ? '<span class="src">Source: ' + esc(sf.source) + '</span>' : '');
+      sofar.innerHTML = blocks.map(function (sf) {
+        var cols = (sf.table && sf.table.columns) || [];
+        var rows = (sf.table && sf.table.rows) || [];
+        return '<article class="sofar">' +
+          '<div class="sofar-head"><span class="tag done">' + esc(sf.verdict) + '</span><h3>' + esc(sf.title) + '</h3></div>' +
+          '<p class="sofar-summary">' + esc(sf.summary) + '</p>' +
+          (rows.length ? '<div class="table-wrap"><table><thead><tr>' + cols.map(function (c) { return '<th>' + esc(c) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+            rows.map(function (r) { return '<tr>' + r.map(function (c, i) { return '<td class="' + (i === 0 ? 'mono' : '') + '">' + esc(c) + '</td>'; }).join('') + '</tr>'; }).join('') +
+            '</tbody></table></div>' : '') +
+          (Array.isArray(sf.notes) && sf.notes.length ? '<ul class="sofar-notes">' + sf.notes.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') + '</ul>' : '') +
+          (sf.source ? '<span class="src">Source: ' + esc(sf.source) + '</span>' : '') +
+          '</article>';
+      }).join('');
     }
 
     var numWrap = document.getElementById('numbers');
