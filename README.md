@@ -57,6 +57,29 @@ connects as a fake OpenFlow 1.3 switch, completes the handshake, sends packet-in
 and asserts the learning switch floods, learns and installs the unicast flow.
 The reasoning behind the choice is in `LOG.md` (2026-10-19).
 
+## The reordering gate (Chunk 2)
+
+Does moving one long TCP flow between paths with different delays damage it?
+Topology `topologies/leafspine.py`: 2 leaves, 4 spines (one-way delay 1, 1, 5,
+10 ms at the spine egress), every switch egress to a host or spine shaped to
+10 Mbit/s with a 20-packet pfifo. Controller `controllers/gate_ctl.py` pins the
+flow with a 5-tuple rule at the ingress leaf; a reroute is one
+`OFPFC_MODIFY_STRICT` there. Runner and analysis:
+
+```bash
+python3 experiments/gate.py campaign --out results/gate/<name> --reps 10   # ~55 min, 80 trials
+.venv/bin/python analysis/gate.py results/gate/<name>                     # table + figure
+```
+
+As a normal user the runner puts every trial in fresh user/net/pid/mount
+namespaces with a private Open vSwitch (`scripts/userns.sh`), so no sudo is
+needed where unprivileged user namespaces are allowed; under `sudo` it uses the
+system OVS and `mn -c`. Each trial keeps kernel TCP counters (nstat) at five
+points, `ss -tin` every 50 ms, iperf3 JSON, tc and OVS stats, and compact
+packet traces of both ends (`*_trace.csv.gz`; the pcaps are not committed).
+The pass criterion was written in `LOG.md` before the first run; the result
+is in `results/gate/<name>/verdict.md` and `figures/gate_timeseries.png`.
+
 ## Layout
 
 ```

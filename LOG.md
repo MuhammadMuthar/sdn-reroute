@@ -202,3 +202,44 @@ tiny" is visible; the decision what to do about a tiny effect is Mutahar's.
 Secondary, not part of the verdict: tshark tcp.analysis flags in W,
 retransmissions and reorder counts from the packet traces, the within-trial
 change G(W) - G(2 s before), cwnd from `ss -tin`.
+
+### Campaign run (2026-10-19, 17:41 to 18:33)
+
+`python3 experiments/gate.py campaign --out results/gate/gate-2026-10-19 --reps 10`,
+rootless (user namespaces). 80 of 80 trials ok, none skipped. The session that
+started it was cut off ~4 min in; the campaign kept running and a new session
+picked it up, so nothing was restarted or reused. One edit landed in
+experiments/gate.py during the run (17:44, moving the sudo-only chown after
+postprocess); it is in the campaign driver, which was already loaded, and
+never runs rootless, so all 80 trials ran the same trial code.
+
+### Result: PASS on the pre-registered criterion, but the effect is small
+
+From `results/gate/gate-2026-10-19/verdict.md` (analysis/gate.py):
+
+- (a) Reorder/spurious events in W: R1 10/10, R2 10/10, R0 10/10, R3 10/10,
+  R4 2/10; controls C1, C3, C4 0/30. The events are caused by the move.
+- (b) Goodput deficit in W vs the destination-path control (Welch 95 % CI):
+  R1 0.028 Mbit/s [0.015, 0.040] = 6.9 KB, 0.29 % of the 2 s volume;
+  R2 0.268 [0.008, 0.529] = 67 KB, 2.8 %. Both exclude zero, so PASS.
+  R0 7.5 KB, R3 5.0 KB, R4 1.1 KB (all also above zero).
+- Retransmissions in W are almost all spurious: retransmitted segments ≈
+  DSACKs received ≈ duplicate arrivals in the receiver trace (R1 5.2/5.0/5.0,
+  R2 8.6/6.3/6.3, R0 5.2/5.2/5.2).
+- R2 is bimodal (post-hoc table in verdict.md, not part of the verdict):
+  3 of 10 R2 trials hit an RTO in W and lose ~0.8 Mbit/s over the window;
+  the other 7 lose 10.8 KB [7.5, 14.0]. R2's 67 KB mean and its wide CI come
+  from those three timeouts.
+- cwnd: slow->fast moves cut the sender's cwnd (R1 35 -> 28, R2 43 -> 22
+  segments, median before vs minimum in W) and the kernel never undid the cut
+  (TCPDSACKUndo and TCPLossUndo are 0 in every trial), yet goodput barely
+  moves. Inference, not measured: with one flow on an idle 10 Mbit/s path and
+  a 20-packet buffer, cwnd stays far above the 1 ms path's BDP after the cut,
+  so the cut only drains the standing queue. Under competing traffic the same
+  cut would cost throughput share; this setup cannot show that.
+- R0 (fast->fast, no delay gap) reorders 10/10, as predicted in the design
+  notes: the standing queue on the old uplink is left behind at the move.
+
+Not done: the sudo cross-check (`sudo ./scripts/chunk2_sudo.sh`, R2 and C1 x3
+on the system OVS) needs Mutahar. Stopping here per the gate rule because the
+damage is small; whether that is enough to build on is Mutahar's call.

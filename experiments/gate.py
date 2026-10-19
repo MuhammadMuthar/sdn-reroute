@@ -109,12 +109,18 @@ def wait_port(port, timeout):
     return False
 
 
+def step(msg):
+    print("%.3f %s" % (time.time(), msg), flush=True)
+
+
 def run_trial(a):
+    import faulthandler
     from mininet.log import setLogLevel
     from topologies.leafspine import build_net, start_net
     from topologies.layout import DEFAULT_SPINE_DELAY_MS
 
     setLogLevel("warning")
+    faulthandler.dump_traceback_later(a.duration + 90, exit=True)   # never hang a campaign
     rd = os.path.abspath(a.run_dir)
     os.makedirs(rd, exist_ok=True)
     meta = dict(run_id=os.path.basename(rd), condition=a.condition,
@@ -130,11 +136,12 @@ def run_trial(a):
                             os.path.join(REPO, "controllers", "gate_ctl.py")],
                            stdout=ctl_log, stderr=subprocess.STDOUT,
                            env=dict(os.environ, GATE_CMD_PORT=str(CMD_PORT)))
-    procs = []
+    procs, dumps = [], []
     net = None
     try:
         if not (wait_port(OF_PORT, 20) and wait_port(CMD_PORT, 5)):
             raise RuntimeError("controller did not start, see controller.log")
+        step("controller up")
         net = build_net(controller_port=OF_PORT)
         meta["tc_setup"] = start_net(net, mbps=a.mbps, queue=a.queue)
         for _ in range(100):
@@ -143,6 +150,7 @@ def run_trial(a):
             time.sleep(0.1)
         else:
             raise RuntimeError("switches not configured: %s" % ctl_cmd({"cmd": "status"}))
+        step("switches configured")
         snd, rcv = net.get(SENDER), net.get(RECEIVER)
         meta["ping"] = snd.cmd("ping -c 3 -i 0.2 %s" % rcv.IP())
         if " 0% packet loss" not in meta["ping"]:
@@ -153,30 +161,41 @@ def run_trial(a):
         meta["sysctl"] = {k: snd.cmd("sysctl -n %s 2>&1" % k).strip() for k in SYSCTLS}
         meta["kernel"] = os.uname().release
 
+        step("ping ok, metrics flushed")
         flow = dict(src=snd.IP(), dst=rcv.IP(), sport=DATA_SPORT, dport=DATA_DPORT)
         meta["pin"] = ctl_cmd({"cmd": "pin", "flow": flow, "spine": a.src})
         if not meta["pin"].get("ok"):
             raise RuntimeError("pin failed: %s" % meta["pin"])
 
-        filt = "tcp port %d" % DATA_SPORT
+        step("flow pinned")
+        # tcpdump stops itself (-G/-W 1: exit at the first packet after cap_s),
+        # because the Ubuntu AppArmor profile of tcpdump refuses signals from
+        # a confined parent. A UDP packet to port 9 is that last packet.
+        filt = "tcp port %d or udp port 9" % DATA_SPORT
+        cap_s = a.duration + 4
         for host, name in ((snd, "send.pcap"), (rcv, "recv.pcap")):
-            procs.append(host.popen(["tcpdump", "-i", "%s-eth0" % host.name, "-s", "128",
-                                     "-B", "16384", "-U", "-Z", "root", "-w",
-                                     os.path.join(rd, name), filt],
+            dumps.append(host.popen(["tcpdump", "-i", "%s-eth0" % host.name, "-s", "128",
+                                     "-B", "16384", "-U", "-Z", "root", "-G", str(cap_s),
+                                     "-W", "1", "-w", os.path.join(rd, name), filt],
+                                    stdout=subprocess.DEVNULL,
                                     stderr=open(os.path.join(rd, name + ".log"), "w")))
+        t_dump = time.time()
         procs.append(snd.popen(
             "while :; do echo T $(date +%%s.%%N); ss -tinH '( sport = :%d )'; "
             "sleep 0.05; done" % DATA_SPORT, shell=True,
-            stdout=open(os.path.join(rd, "ss.log"), "w")))
+            stdout=open(os.path.join(rd, "ss.log"), "w"), stderr=subprocess.DEVNULL))
         srv = rcv.popen(["iperf3", "-s", "-1", "-J", "-i", "0.1", "-p", str(DATA_DPORT)],
-                        stdout=open(os.path.join(rd, "iperf_server.json"), "w"))
+                        stdout=open(os.path.join(rd, "iperf_server.json"), "w"),
+                        stderr=subprocess.STDOUT)
         time.sleep(1.0)                               # tcpdump + iperf3 -s listening
         snaps = {"start": {"t": time.time(), SENDER: read_counters(snd),
                            RECEIVER: read_counters(rcv)}}
         t0 = time.time()
+        step("captures and server started")
         cli = snd.popen(["iperf3", "-c", rcv.IP(), "-p", str(DATA_DPORT), "-t",
                          str(a.duration), "--cport", str(DATA_SPORT), "-J", "-i", "0.1"],
-                        stdout=open(os.path.join(rd, "iperf_client.json"), "w"))
+                        stdout=open(os.path.join(rd, "iperf_client.json"), "w"),
+                        stderr=subprocess.STDOUT)
         meta["t_client_start"] = t0
 
         def snap(name):
@@ -187,6 +206,7 @@ def run_trial(a):
         snap("pre_window")
         time.sleep(max(0.0, t0 + a.move_at - time.time()))
         snap("pre")
+        step("moving")
         meta["move"] = ctl_cmd({"cmd": "move", "flow": flow, "spine": a.dst})
         if not meta["move"].get("ok"):
             meta["errors"].append("move failed: %s" % meta["move"])
@@ -194,11 +214,21 @@ def run_trial(a):
         meta["t_move"] = t_move
         time.sleep(max(0.0, t_move + WINDOW_S - time.time()))
         snap("post")
+        step("post-window snapshot")
         cli.wait(timeout=a.duration + 30)
         srv.wait(timeout=10)
         snap("end")
+        step("client done")
         meta["counters"] = snaps
         meta["t_client_end"] = time.time()
+        time.sleep(max(0.0, t_dump + cap_s + 0.2 - time.time()))
+        for _ in range(20):
+            snd.cmd("echo end > /dev/udp/%s/9" % rcv.IP())
+            if all(d.poll() is not None for d in dumps):
+                break
+            time.sleep(0.25)
+        else:
+            meta["errors"].append("tcpdump did not exit")
 
         with open(os.path.join(rd, "tc_stats.txt"), "w") as f:
             for sw in net.switches:
@@ -219,12 +249,15 @@ def run_trial(a):
         meta["errors"].append("%s: %s" % (type(exc).__name__, exc))
         raise
     finally:
-        for p in procs:
+        for p in procs + [d for d in dumps if d.poll() is None]:
             try:
                 p.send_signal(signal.SIGINT)
                 p.wait(timeout=5)
             except Exception:
-                p.kill()
+                try:
+                    p.kill()
+                except OSError:
+                    pass
         if net is not None:
             net.stop()
         ctl.terminate()
@@ -244,11 +277,15 @@ def tshark_flags(pcap, windows):
     fields = ["tcp.analysis.out_of_order", "tcp.analysis.retransmission",
               "tcp.analysis.spurious_retransmission", "tcp.analysis.fast_retransmission",
               "tcp.analysis.lost_segment", "tcp.analysis.duplicate_ack"]
-    cmd = ["tshark", "-r", pcap, "-Y", "tcp.analysis.flags", "-T", "fields",
+    # pcap on stdin: Ubuntu's AppArmor profile for tshark cannot open files in
+    # this repo's path when tshark is started from a confined parent.
+    cmd = ["tshark", "-r", "-", "-Y", "tcp.analysis.flags", "-T", "fields",
            "-E", "separator=,", "-e", "frame.time_epoch"]
     for fl in fields:
         cmd += ["-e", fl]
-    out = subprocess.run(cmd, capture_output=True, text=True, check=True).stdout
+    with open(pcap, "rb") as f:
+        out = subprocess.run(cmd, stdin=f, capture_output=True, text=True,
+                             check=True).stdout
     counts = {w: {fl.split(".")[-1]: 0 for fl in fields} for w in windows}
     for line in out.splitlines():
         parts = line.split(",")
@@ -270,8 +307,10 @@ def postprocess(rd):
     out = {}
     for side in ("send", "recv"):
         pcap = os.path.join(rd, side + ".pcap")
+        # receiver side: data in and ACKs out; sender side: only the data it sent
         out[side + "_rows"] = write_trace(pcap, os.path.join(rd, side + "_trace.csv.gz"),
-                                          DATA_SPORT, t0)
+                                          DATA_SPORT, t0,
+                                          dirs=(0,) if side == "send" else (0, 1))
         out[side] = tshark_flags(pcap, {
             "pre": (tm - WINDOW_S, tm), "post": (tm, tm + WINDOW_S),
             "all": (t0, t0 + meta["duration_s"] + 5)})
@@ -293,7 +332,11 @@ def campaign(a):
         json.dump(dict(conditions={c: CONDITIONS[c] for c in names}, reps=a.reps,
                        seed=a.seed, order=order, move_at_s=a.move_at,
                        duration_s=a.duration, queue_pkts=a.queue, mbps=a.mbps,
-                       started=time.strftime("%Y-%m-%dT%H:%M:%S%z")), f, indent=1)
+                       started=time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                       host=os.uname().nodename, kernel=os.uname().release,
+                       euid=os.geteuid(),
+                       host_default_qdisc=open("/proc/sys/net/core/default_qdisc").read().strip()),
+                  f, indent=1)
     index = os.path.join(a.out, "trials.csv")
     new = not os.path.exists(index)
     root = os.geteuid() == 0
@@ -318,15 +361,15 @@ def campaign(a):
         os.makedirs(rd, exist_ok=True)
         with open(os.path.join(rd, "trial.log"), "w") as log:
             rc = subprocess.run(cmd, stdout=log, stderr=subprocess.STDOUT, cwd=REPO).returncode
-        if root and os.environ.get("SUDO_UID"):
-            subprocess.run(["chown", "-R", "%s:%s" % (os.environ["SUDO_UID"],
-                                                      os.environ["SUDO_GID"]), a.out])
         status = "ok" if rc == 0 else "FAILED rc=%d (see %s/trial.log)" % (rc, rd)
         if rc == 0:
             try:
                 postprocess(rd)
             except Exception as exc:
                 status = "POSTPROCESS FAILED: %s" % exc
+        if root and os.environ.get("SUDO_UID"):      # hand results back to the sudo user
+            subprocess.run(["chown", "-R", "%s:%s" % (os.environ["SUDO_UID"],
+                                                      os.environ["SUDO_GID"]), a.out])
         print("%s, %.0f s" % (status, time.time() - t), flush=True)
         with open(index, "a", newline="") as f:
             w = csv.writer(f)
