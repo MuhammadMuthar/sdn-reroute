@@ -39,13 +39,20 @@ the repository's CLAUDE.md apply to this file too.
 
 ## Deploying on Vercel
 
-The site has no build step, so Vercel serves the folder as-is.
+The site has no build step. The repository root has a `vercel.json` that tells
+Vercel to skip the build and serve `site/` as static files, so a default import
+works with no settings changed:
 
 1. Go to https://vercel.com/new and import `MuhammadMuthar/sdn-reroute` from GitHub.
-2. Under **Root Directory**, click Edit and choose `site`.
-3. **Framework Preset**: Other. Leave **Build Command**, **Output Directory** and
-   **Install Command** empty (toggle Override off if it is on).
-4. Click Deploy. Every push to `main` redeploys; pull requests get preview URLs.
+2. Leave Root Directory as `./` and click Deploy.
 
-`vercel.json` in this folder adds clean URLs and a short cache on `results/` so a
-new figure shows up within a minute of merging.
+Vercel auto-detects a "Python" preset because of the repository's
+`requirements.txt`; the root `vercel.json` (`"framework": null`,
+`"outputDirectory": "site"`) overrides that. If a project was already created
+with the Python preset and failed with `PYTHON_ENTRYPOINT_NOT_FOUND`, either
+redeploy after this file is on `main`, or set Framework Preset to **Other** and
+Root Directory to `site` under Project Settings, then redeploy.
+
+Every push to `main` redeploys; pull requests get preview URLs. Both `vercel.json`
+files add clean URLs and a short cache on `results/` so a new figure shows up
+within a minute of merging.
