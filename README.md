@@ -80,11 +80,48 @@ packet traces of both ends (`*_trace.csv.gz`; the pcaps are not committed).
 The pass criterion was written in `LOG.md` before the first run; the result
 is in `results/gate/<name>/verdict.md` and `figures/gate_timeseries.png`.
 
+## ECMP baseline and the experiment runner (Chunk 3)
+
+`controllers/ecmp.py` puts one OpenFlow 1.3 select group (one bucket per
+spine) on each leaf; `controllers/fabric.py` is the shared base every later
+controller builds on (static forwarding, pin/move command channel).
+`experiments/runner.py` is the reusable runner: topology + controller +
+seeded traffic (`experiments/traffic.py`: iperf3 elephants with fixed
+`--cport`, heavy-tailed short flows from `experiments/mice.py` that log their
+completion time) + counters, `ss`, captures + metrics to CSV.
+
+```bash
+# one command: N seeded ECMP runs -> results/ecmp/<name>/runs.csv, flows.csv, links.csv
+python3 experiments/runner.py campaign --controller ecmp --scenario ecmp_mixed \
+    --runs 10 --seed 1 --out results/ecmp/<name>                        # ~12 min
+python3 experiments/runner.py campaign --controller ecmp --scenario ecmp_mixed \
+    --runs 3 --seed 1 --out results/ecmp/<name>-replay                  # same seeds again
+.venv/bin/python analysis/ecmp.py results/ecmp/<name> results/ecmp/<name>-replay
+
+# deliberate move of an elephant, idle or onto a path shared with another elephant
+python3 experiments/runner.py campaign --controller ecmp --scenario loaded_move \
+    --conditions IC1,IR2,LC1,LR0,LR2 --runs 10 --seed 1 --out results/loaded/<name>
+.venv/bin/python analysis/loaded_move.py results/loaded/<name>
+```
+
+`runs.csv` has one row per run (elephant goodput, mice FCT p50/p99 overall
+and by spine class, link utilisation, collisions, retransmissions, group
+bucket bytes, schedule sha256), `flows.csv` one row per flow with the spine
+it actually used (from captures on l1's uplinks) and `links.csv` per-uplink
+utilisation. Definitions are in the docstring of `experiments/metrics.py`.
+
+Host NIC qdisc: the runner puts a 10 us netem on every host NIC by default
+(`--host-qdisc netem`). Without it, Linux keeps each packet charged to its
+sending socket while it waits in the emulated switch queue, and TCP Small
+Queues then caps every flow at a few packets there, so congestion control
+never engages. `python3 experiments/tsq_check.py --out results/tsq/<name>`
+shows the difference; LOG.md (Chunk 3) has the explanation.
+
 ## Layout
 
 ```
-controllers/   os-ken apps: run.py (launcher), learning_switch.py; later ecmp.py, hedera.py, costaware.py
-topologies/    Mininet topologies: smoke.py now; leafspine.py, fattree.py later
+controllers/   os-ken apps: run.py (launcher), learning_switch.py, gate_ctl.py, fabric.py + ecmp.py; later hedera.py, costaware.py
+topologies/    Mininet topologies: smoke.py, leafspine.py; fattree.py later
 experiments/   runners that launch topology + controller + traffic + capture
 analysis/      parsing captures, statistics, plots, model training
 results/       raw outputs (CSV, logs, env snapshots), never edited by hand

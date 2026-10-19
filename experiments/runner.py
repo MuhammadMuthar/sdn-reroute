@@ -1,0 +1,453 @@
+#!/usr/bin/env python3
+"""Reusable experiment runner (Chunk 3 onwards; Chunk 2's gate.py was its
+first version and stays as it was so the gate can be rerun).
+
+One *run* = fresh network + fresh controller + one seeded traffic schedule
+(experiments/traffic.py): iperf3 elephants with fixed --cport, short flows
+from experiments/mice.py, optional pins and deliberate moves through the
+controller's command channel. Per run it records
+  - schedule.json (and its sha256), meta.json (pins, moves with flow-mod
+    timing, sysctls of h1, tc setup, errors), counters.json (TCP MIB counters
+    of every host, i.e. what nstat reads, at start/end and around moves)
+  - iperf3 client and server JSON per elephant (100 ms intervals)
+  - mice_<host>.csv: one row per short flow with its completion time
+  - ss -tin of the elephant sockets on every elephant sender (50-100 ms)
+  - header captures on the four uplinks of l1 (path oracle, link
+    utilisation; experiments/spinetrace.py) and on both NICs of each
+    "tagged" elephant (packet traces, experiments/pcaptrace.py)
+  - group stats, flow and port stats of every switch, tc -s qdisc
+  - the controller's own log and its list of pins/moves (events)
+Then experiments/metrics.py (venv) turns the run into CSV rows and rebuilds
+the campaign CSVs.
+
+Usage (repo root; as a normal user every run goes through scripts/userns.sh,
+under sudo it runs on the system OVS with `mn -c` first):
+  python3 experiments/runner.py campaign --controller ecmp --scenario ecmp_mixed \\
+      --runs 10 --seed 1 --out results/ecmp/<name>
+  python3 experiments/runner.py campaign --controller ecmp --scenario loaded_move \\
+      --conditions IC1,IR2,LC1,LR2,LR0 --runs 10 --seed 1 --out results/loaded/<name>
+Run r of a campaign uses seed + r - 1; with --conditions every condition of
+rep r uses that same seed (paired), in a block-randomised order.
+"""
+
+import argparse
+import csv
+import json
+import os
+import random
+import signal
+import socket
+import struct
+import subprocess
+import sys
+import time
+
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, REPO)
+
+from experiments.gate import SYSCTLS, read_counters, step, wait_port  # noqa: E402
+
+VENV_PY = os.path.join(REPO, ".venv", "bin", "python")
+OF_PORT, CMD_PORT = 6653, 6700
+SS_FILTER = "( sport >= :40001 and sport <= :40999 )"
+SNAPLEN_UPLINK, SNAPLEN_HOST = 96, 128
+
+
+def ctl_cmd(req, timeout=10.0):
+    with socket.create_connection(("127.0.0.1", CMD_PORT), timeout=timeout) as s:
+        s.sendall((json.dumps(req) + "\n").encode())
+        buf = b""
+        while not buf.endswith(b"\n"):
+            chunk = s.recv(1 << 20)
+            if not chunk:
+                break
+            buf += chunk
+    return json.loads(buf)
+
+
+def tcp_counters(host):
+    return {k: v for k, v in read_counters(host).items() if k.startswith("Tcp")}
+
+
+def udp9_frame():
+    """Minimal Ethernet/IPv4/UDP frame to port 9: the packet that makes a
+    `tcpdump -G/-W 1` capture on a switch port close its file and exit."""
+    payload = b"end!"
+    udp = struct.pack("!HHHH", 9, 9, 8 + len(payload), 0) + payload
+    ip = struct.pack("!BBHHHBBH4s4s", 0x45, 0, 20 + len(udp), 0, 0, 1, 17, 0,
+                     bytes([10, 0, 0, 254]), bytes([10, 0, 0, 253]))
+    s = sum(struct.unpack("!10H", ip))
+    s = (s & 0xFFFF) + (s >> 16)
+    ip = ip[:10] + struct.pack("!H", ~s & 0xFFFF) + ip[12:]
+    return b"\xff" * 6 + b"\x02\x00\x00\x00\x00\xfe" + b"\x08\x00" + ip + udp
+
+
+def inject(ifname):
+    with socket.socket(socket.AF_PACKET, socket.SOCK_RAW) as s:
+        s.bind((ifname, 0))
+        s.send(udp9_frame())
+
+
+def run(a):
+    import faulthandler
+    from mininet.log import setLogLevel
+    from experiments.traffic import flow_tuple, reverse_tuple
+    from topologies.layout import DEFAULT_SPINE_DELAY_MS
+    from topologies.leafspine import build_net, start_net
+
+    setLogLevel("warning")
+    rd = os.path.abspath(a.run_dir)
+    sched = json.load(open(os.path.join(rd, "schedule.json")))
+    D = sched["duration"]
+    faulthandler.dump_traceback_later(D + 150, exit=True)    # never hang a campaign
+    hpl = len(sched["hosts"]) // 2
+    meta = dict(run_id=os.path.basename(rd), controller=a.controller,
+                scenario=sched["scenario"], condition=sched["condition"],
+                seed=sched["seed"], duration_s=D, queue_pkts=a.queue, mbps=a.mbps,
+                host_qdisc=a.host_qdisc,
+                hosts_per_leaf=hpl, spine_delay_ms=list(DEFAULT_SPINE_DELAY_MS),
+                uid=os.getuid(), userns=os.environ.get("SDN_USERNS_INNER") == "1",
+                kernel=os.uname().release, t_wall_start=time.time(), errors=[])
+    ctl_log = open(os.path.join(rd, "controller.log"), "w")
+    ctl = subprocess.Popen([VENV_PY, os.path.join(REPO, "controllers", "run.py"),
+                            "--ofp-tcp-listen-port", str(OF_PORT),
+                            os.path.join(REPO, "controllers", a.controller + ".py")],
+                           stdout=ctl_log, stderr=subprocess.STDOUT,
+                           env=dict(os.environ, FABRIC_CMD_PORT=str(CMD_PORT),
+                                    FABRIC_HOSTS_PER_LEAF=str(hpl)))
+    bg, dumps, clients = [], [], []
+    counters = {}
+    net = None
+    try:
+        if not (wait_port(OF_PORT, 20) and wait_port(CMD_PORT, 5)):
+            raise RuntimeError("controller did not start, see controller.log")
+        step("controller up")
+        net = build_net(hosts_per_leaf=hpl, controller_port=OF_PORT)
+        meta["tc_setup"] = start_net(net, mbps=a.mbps, queue=a.queue,
+                                     host_qdisc=a.host_qdisc)
+        for _ in range(100):
+            st = ctl_cmd({"cmd": "status"})
+            if st.get("ready"):
+                break
+            time.sleep(0.1)
+        else:
+            raise RuntimeError("switches not configured: %s" % st)
+        meta["controller_app"] = st.get("app")
+        step("switches configured")
+        H = {name: net.get(name) for name in sched["hosts"]}
+        left = sorted(n for n in H if int(n[1:]) <= hpl)
+        right = sorted(n for n in H if int(n[1:]) > hpl)
+        # reachability: every left host to its mirror on the right
+        meta["ping"] = {}
+        for i, s in enumerate(left):
+            d = right[i % len(right)]
+            out = H[s].cmd("ping -c 2 -i 0.2 %s" % H[d].IP())
+            meta["ping"]["%s-%s" % (s, d)] = " 0% packet loss" in out
+            if " 0% packet loss" not in out:
+                raise RuntimeError("ping %s -> %s failed:\n%s" % (s, d, out))
+        for h in H.values():
+            h.cmd("ip tcp_metrics flush all")
+        meta["sysctl"] = {k: H["h1"].cmd("sysctl -n %s 2>&1" % k).strip() for k in SYSCTLS}
+        step("ping ok, metrics flushed")
+
+        eleph = {e["id"]: e for e in sched["elephants"]}
+        meta["pins"] = []
+        for p in sched["pins"]:
+            e = eleph[p["flow"]]
+            r = ctl_cmd({"cmd": "pin", "flow": flow_tuple(e), "spine": p["spine"]})
+            meta["pins"].append(dict(p, dir="data", reply=r))
+            if sched.get("ack_spine"):
+                r2 = ctl_cmd({"cmd": "pin", "flow": reverse_tuple(e),
+                              "spine": sched["ack_spine"]})
+                meta["pins"].append(dict(flow=p["flow"], spine=sched["ack_spine"],
+                                         dir="ack", reply=r2))
+            if not all(x["reply"].get("ok") for x in meta["pins"]):
+                raise RuntimeError("pin failed: %s" % meta["pins"])
+        for sw in ("l1", "l2"):
+            meta["groups_" + sw] = net.get(sw).cmd(
+                "ovs-ofctl -O OpenFlow13 dump-groups %s" % sw)
+
+        # ---- captures (each stops itself, see udp9_frame) ------------------
+        cap_s = D + 8
+        t_dump = time.time()
+        for k in range(1, 5):
+            ifn = "l1-s%d" % k
+            dumps.append(subprocess.Popen(
+                ["tcpdump", "-i", ifn, "-s", str(SNAPLEN_UPLINK), "-B", "32768", "-U",
+                 "-Z", "root", "-G", str(cap_s), "-W", "1",
+                 "-w", os.path.join(rd, "uplink_s%d.pcap" % k), "tcp or udp port 9"],
+                stdout=subprocess.DEVNULL,
+                stderr=open(os.path.join(rd, "uplink_s%d.pcap.log" % k), "w")))
+        host_caps = []
+        for fid in sched["tagged"]:
+            e = eleph[fid]
+            for side, hn in (("send", e["src"]), ("recv", e["dst"])):
+                name = "%s_%s.pcap" % (side, fid)
+                dumps.append(H[hn].popen(
+                    ["tcpdump", "-i", "%s-eth0" % hn, "-s", str(SNAPLEN_HOST), "-B",
+                     "16384", "-U", "-Z", "root", "-G", str(cap_s), "-W", "1",
+                     "-w", os.path.join(rd, name),
+                     "tcp port %d or udp port 9" % e["sport"]],
+                    stdout=subprocess.DEVNULL,
+                    stderr=open(os.path.join(rd, name + ".log"), "w")))
+                host_caps.append((e, hn))
+        ss_period = 0.05 if sched["tagged"] else 0.1
+        for hn in sorted({e["src"] for e in sched["elephants"]}):
+            bg.append(H[hn].popen(
+                "while :; do echo T $(date +%%s.%%N); ss -tinmH '%s'; sleep %g; done"
+                % (SS_FILTER, ss_period), shell=True,
+                stdout=open(os.path.join(rd, "ss_%s.log" % hn), "w"),
+                stderr=subprocess.DEVNULL))
+
+        # ---- servers ---------------------------------------------------------
+        servers = []
+        for e in sched["elephants"]:
+            servers.append(H[e["dst"]].popen(
+                ["iperf3", "-s", "-1", "-J", "-i", "0.1", "-p", str(e["dport"])],
+                stdout=open(os.path.join(rd, "iperf_server_%s.json" % e["id"]), "w"),
+                stderr=subprocess.STDOUT))
+        mice_dsts = sorted({m["dst"] for m in sched["mice"]})
+        mice_srcs = sorted({m["src"] for m in sched["mice"]})
+        for hn in mice_dsts:
+            bg.append(H[hn].popen(["python3", os.path.join(REPO, "experiments", "mice.py"),
+                                   "serve", "--port", "8000"],
+                                  stdout=subprocess.DEVNULL,
+                                  stderr=open(os.path.join(rd, "mice_server_%s.log" % hn),
+                                              "w")))
+        time.sleep(1.0)
+        counters["start"] = {"t": time.time(), **{n: tcp_counters(h) for n, h in H.items()}}
+        t0 = time.time() + 1.0           # mice clients start their python before t0
+        meta["t0"] = t0
+        for hn in mice_srcs:
+            clients.append(H[hn].popen(
+                ["python3", os.path.join(REPO, "experiments", "mice.py"), "client",
+                 "--schedule", os.path.join(rd, "schedule.json"), "--host", hn,
+                 "--t0", "%.6f" % t0, "--out", os.path.join(rd, "mice_%s.csv" % hn)],
+                stdout=subprocess.DEVNULL,
+                stderr=open(os.path.join(rd, "mice_client_%s.log" % hn), "w")))
+        step("captures and servers started")
+
+        # ---- timeline: elephant starts, then moves with counter snapshots ----
+        def snap(name):
+            counters[name] = {"t": time.time(),
+                              **{n: tcp_counters(h) for n, h in H.items()}}
+
+        meta["elephant_start"] = {}
+        for e in sorted(sched["elephants"], key=lambda e: e["start"]):
+            time.sleep(max(0.0, t0 + e["start"] - time.time()))
+            meta["elephant_start"][e["id"]] = time.time()
+            clients.append(H[e["src"]].popen(
+                ["iperf3", "-c", e["dst_ip"], "-p", str(e["dport"]), "-t", str(e["duration"]),
+                 "--cport", str(e["sport"]), "-J", "-i", "0.1"],
+                stdout=open(os.path.join(rd, "iperf_client_%s.json" % e["id"]), "w"),
+                stderr=subprocess.STDOUT))
+        step("elephants started")
+        meta["moves"] = []
+        for i, mv in enumerate(sorted(sched["moves"], key=lambda m: m["at"])):
+            e = eleph[mv["flow"]]
+            for off in sorted(o for o in sched["snapshots"] if o < 0):
+                time.sleep(max(0.0, t0 + mv["at"] + off - time.time()))
+                snap("m%d_%+g" % (i, off))
+            time.sleep(max(0.0, t0 + mv["at"] - time.time()))
+            snap("m%d_pre" % i)
+            r = ctl_cmd({"cmd": "move", "flow": flow_tuple(e), "spine": mv["spine"]})
+            if not r.get("ok"):
+                meta["errors"].append("move failed: %s" % r)
+            meta["moves"].append(dict(mv, reply=r))
+            tb = r.get("t_barrier", time.time())
+            step("moved %s -> s%d" % (mv["flow"], mv["spine"]))
+            for off in sorted(o for o in sched["snapshots"] if o > 0):
+                time.sleep(max(0.0, tb + off - time.time()))
+                snap("m%d_%+g" % (i, off))
+        for c in clients:
+            c.wait(timeout=D + 45)
+        for s in servers:
+            try:
+                s.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                meta["errors"].append("iperf3 server did not exit")
+        snap("end")
+        step("clients done")
+        meta["t_clients_end"] = time.time()
+
+        # ---- stop the captures ----------------------------------------------
+        time.sleep(max(0.0, t_dump + cap_s + 0.3 - time.time()))
+        for _ in range(40):
+            for k in range(1, 5):
+                inject("l1-s%d" % k)
+            for e, hn in host_caps:
+                H[e["src"]].cmd("echo end > /dev/udp/%s/9" % e["dst_ip"])
+            if all(d.poll() is not None for d in dumps):
+                break
+            time.sleep(0.25)
+        else:
+            meta["errors"].append("tcpdump did not exit")
+
+        meta["controller_events"] = ctl_cmd({"cmd": "events"}).get("events")
+        with open(os.path.join(rd, "ovs_stats.txt"), "w") as f:
+            for sw in net.switches:
+                for what in ("dump-group-stats", "dump-flows", "dump-ports"):
+                    if what == "dump-group-stats" and not sw.name.startswith("l"):
+                        continue
+                    f.write("== %s %s\n%s" % (sw.name, what, sw.cmd(
+                        "ovs-ofctl -O OpenFlow13 %s %s" % (what, sw.name))))
+        with open(os.path.join(rd, "tc_stats.txt"), "w") as f:
+            for sw in net.switches:
+                for intf in sw.intfList():
+                    if intf.name != "lo":
+                        f.write("== %s\n%s" % (intf.name, sw.cmd(
+                            "tc -s qdisc show dev %s" % intf.name)))
+    except Exception as exc:
+        meta["errors"].append("%s: %s" % (type(exc).__name__, exc))
+        raise
+    finally:
+        for p in bg + clients + [d for d in dumps if d.poll() is None]:
+            try:
+                if p.poll() is None:
+                    p.send_signal(signal.SIGINT)
+                    p.wait(timeout=5)
+            except Exception:
+                try:
+                    p.kill()
+                except OSError:
+                    pass
+        if net is not None:
+            net.stop()
+        ctl.terminate()
+        try:
+            ctl.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            ctl.kill()
+        ctl_log.close()
+        meta["t_wall_end"] = time.time()
+        with open(os.path.join(rd, "meta.json"), "w") as f:
+            json.dump(meta, f, indent=1, sort_keys=True)
+        with open(os.path.join(rd, "counters.json"), "w") as f:
+            json.dump(counters, f, sort_keys=True)
+
+
+# -------------------------------------------------------------- campaign ----
+def postprocess(rd):
+    """As the normal user: summarise captures, keep traces, gzip pcaps."""
+    from experiments.pcaptrace import write_trace
+    from experiments.spinetrace import summarize
+    meta = json.load(open(os.path.join(rd, "meta.json")))
+    sched = json.load(open(os.path.join(rd, "schedule.json")))
+    t0 = meta["t0"]
+    left_ips = {ip for n, ip in sched["hosts"].items() if int(n[1:]) <= meta["hosts_per_leaf"]}
+    pcaps = {k: os.path.join(rd, "uplink_s%d.pcap" % k) for k in range(1, 5)}
+    summarize(pcaps, t0, left_ips, os.path.join(rd, "spine_flows.csv"),
+              os.path.join(rd, "spine_bins.csv"))
+    for e in sched["elephants"]:
+        if e["id"] not in sched["tagged"]:
+            continue
+        for side in ("send", "recv"):
+            p = os.path.join(rd, "%s_%s.pcap" % (side, e["id"]))
+            write_trace(p, os.path.join(rd, "%s_%s_trace.csv.gz" % (side, e["id"])),
+                        e["sport"], t0, dirs=(0,) if side == "send" else (0, 1))
+            pcaps[side + e["id"]] = p
+    for p in pcaps.values():
+        subprocess.run(["gzip", "-f", p], check=True)
+    subprocess.run([VENV_PY, os.path.join(REPO, "experiments", "metrics.py"), "run", rd],
+                   check=True)
+    big = [os.path.join(rd, f) for f in os.listdir(rd)
+           if f.startswith(("ss_", "iperf_")) and f.endswith((".log", ".json"))]
+    if big:                                  # kept (committed), just compressed
+        subprocess.run(["gzip", "-f"] + big, check=True)
+
+
+def campaign(a):
+    from experiments.traffic import make_schedule, resolve, schedule_sha256
+    conds = a.conditions.split(",") if a.conditions else [""]
+    rng = random.Random(a.seed * 7919 + 17)
+    order = []
+    for rep in range(1, a.runs + 1):            # block-randomised, paired seeds
+        block = list(conds)
+        rng.shuffle(block)
+        order += [(rep, c) for c in block]
+    os.makedirs(a.out, exist_ok=True)
+    plan = dict(controller=a.controller, scenario=a.scenario, conditions=conds,
+                runs=a.runs, seed=a.seed, order=order, queue_pkts=a.queue, mbps=a.mbps,
+                host_qdisc=a.host_qdisc,
+                started=time.strftime("%Y-%m-%dT%H:%M:%S%z"), host=os.uname().nodename,
+                kernel=os.uname().release, euid=os.geteuid(), argv=sys.argv,
+                host_default_qdisc=open("/proc/sys/net/core/default_qdisc").read().strip())
+    plan_path = os.path.join(a.out, "plan.json")
+    if not os.path.exists(plan_path):
+        json.dump(plan, open(plan_path, "w"), indent=1)
+    root = os.geteuid() == 0
+    index = os.path.join(a.out, "trials.csv")
+    for i, (rep, c) in enumerate(order, 1):
+        seed = a.seed + rep - 1
+        run_id = "%s%sr%02d" % (c, "-" if c else "", rep)
+        rd = os.path.join(a.out, "runs", run_id)
+        if os.path.exists(os.path.join(rd, "run_flows.csv")):
+            print("[%d/%d] %s exists, skipping" % (i, len(order), run_id), flush=True)
+            continue
+        os.makedirs(rd, exist_ok=True)
+        sched = make_schedule(resolve(a.scenario, c or None), seed)
+        sched["sha256"] = schedule_sha256(sched)
+        json.dump(sched, open(os.path.join(rd, "schedule.json"), "w"), indent=1)
+        cmd = [sys.executable, os.path.abspath(__file__), "run", "--run-dir", rd,
+               "--controller", a.controller, "--queue", str(a.queue), "--mbps", str(a.mbps),
+               "--host-qdisc", a.host_qdisc]
+        if root:
+            subprocess.run(["mn", "-c"], capture_output=True)
+        else:
+            cmd = [os.path.join(REPO, "scripts", "userns.sh")] + cmd
+        t = time.time()
+        print("[%d/%d] %s seed %d ..." % (i, len(order), run_id, seed), end=" ", flush=True)
+        with open(os.path.join(rd, "run.log"), "w") as log:
+            rc = subprocess.run(cmd, stdout=log, stderr=subprocess.STDOUT, cwd=REPO).returncode
+        if root and os.environ.get("SUDO_UID"):      # hand results back to the sudo user
+            subprocess.run(["chown", "-R", "%s:%s" % (os.environ["SUDO_UID"],
+                                                      os.environ["SUDO_GID"]), a.out])
+        status = "ok" if rc == 0 else "FAILED rc=%d (see %s/run.log)" % (rc, rd)
+        if rc == 0:
+            try:
+                postprocess(rd)
+            except Exception as exc:
+                status = "POSTPROCESS FAILED: %s" % exc
+        print("%s, %.0f s" % (status, time.time() - t), flush=True)
+        new = not os.path.exists(index)
+        with open(index, "a", newline="") as f:
+            w = csv.writer(f)
+            if new:
+                w.writerow(["seq", "run_id", "condition", "rep", "seed", "status", "seconds"])
+            w.writerow([i, run_id, c, rep, seed, status, "%.1f" % (time.time() - t)])
+        if rc != 0 and a.stop_on_error:
+            sys.exit("stopping: run %s failed" % run_id)
+    subprocess.run([VENV_PY, os.path.join(REPO, "experiments", "metrics.py"), "collect",
+                    a.out], check=True)
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    sub = ap.add_subparsers(dest="mode", required=True)
+    for name in ("run", "campaign"):
+        p = sub.add_parser(name)
+        p.add_argument("--controller", default="ecmp",
+                       help="controllers/<name>.py, a FabricController app")
+        p.add_argument("--queue", type=int, default=20, help="pfifo packets per port")
+        p.add_argument("--mbps", type=float, default=10.0)
+        p.add_argument("--host-qdisc", choices=["netem", "default"], default="netem",
+                       help="host NIC qdisc; netem (10 us) frees each skb when it leaves "
+                       "the host, see topologies/leafspine.py")
+        if name == "run":
+            p.add_argument("--run-dir", required=True, help="holds schedule.json")
+        else:
+            p.add_argument("--scenario", required=True)
+            p.add_argument("--conditions", default="", help="comma list, if the scenario has any")
+            p.add_argument("--runs", type=int, default=10)
+            p.add_argument("--seed", type=int, default=1)
+            p.add_argument("--out", required=True)
+            p.add_argument("--stop-on-error", action="store_true")
+    a = ap.parse_args()
+    if a.mode == "run":
+        run(a)
+    else:
+        campaign(a)
+
+
+if __name__ == "__main__":
+    main()

@@ -272,3 +272,123 @@ closes after the sudo cross-check (`sudo ./scripts/chunk2_sudo.sh`).
   trials. The gate-2026-10-19 verdict is unchanged (PASS).
 
 Chunk 2 closed. Next: Chunk 3.
+
+## 2026-10-19 Chunk 3: ECMP baseline and the reusable runner
+
+Remote Control session on the laptop, Opus 5.5. Plan: CHUNKS.md section B,
+Chunk 3, plus the carry-over from Chunk 2: measure what the slow->fast cwnd
+cut costs when the new path already carries traffic.
+
+### Design
+
+- `controllers/fabric.py`: shared base for every controller from now on
+  (static spine/egress-leaf forwarding by destination MAC, barrier handling,
+  the JSON command channel with pin/move/status/events). `gate_ctl.py` is left
+  untouched so Chunk 2 reruns exactly. Gotcha found on the way: an os-ken app
+  must not set `self.events`; OSKenApp uses that name for its event queue and
+  overwriting it silently stops all event handling (no error anywhere).
+- `controllers/ecmp.py`: one OF1.3 select group per leaf, 4 equal buckets
+  (one per spine). OF1.3 cannot name a selection method, so OVS 3.7.1 uses its
+  default, dp_hash with the kernel's symmetric L3/L4 hash (ovs-ofctl(8)). That
+  hash is per 5-tuple and deterministic within a boot, but seeded randomly at
+  boot, so the runner records the spine every flow actually used instead of
+  predicting it. Symmetric: ACKs come back over the same spine as the data.
+- `experiments/traffic.py`: scenarios as plain data and a seeded schedule
+  (`random.Random(seed)` only). `ecmp_mixed`: 4 iperf3 elephants h1..h4 ->
+  h5..h8 for 30 s with seeded --cport (so the seed decides the collision
+  pattern), Poisson mice at 10/s from each of h1..h4 to a random h5..h8,
+  bounded-Pareto sizes (alpha 1.2, 2 KB to 1 MB, mean 8.5 KB, about 2.6 Mbit/s
+  offered in total), fixed seeded source ports. `loaded_move`: see below.
+- `experiments/mice.py`: stdlib client/server; FCT = connect() to the
+  server's 1-byte reply after the half-close.
+- `experiments/runner.py`: one run = fresh namespaces + controller +
+  schedule; nstat-style counters of every host, ss -tinm of elephant sockets,
+  header captures on the four uplinks of l1 (path oracle and link utilisation,
+  `experiments/spinetrace.py`), full traces of "tagged" elephants, group /
+  flow / port stats, controller pin/move log. Rootless via userns.sh as in
+  Chunk 2, or under sudo with `mn -c`. `experiments/metrics.py` (venv) turns
+  each run into run_flows.csv / run_links.csv / run_summary.json and rebuilds
+  the campaign's runs.csv, flows.csv and links.csv.
+- Switch-port captures stop themselves like in Chunk 2 (-G/-W 1); the last
+  packet is a raw UDP/9 frame the runner injects on each uplink.
+
+Dev pilots (not committed, not analysed): results/ecmp/dev-pilot1..3 and
+results/loaded/dev-pilot1..2, used to debug the runner. Two things they
+showed are recorded here because they shaped the design: the same seed gave
+the same spine for 1054 of 1054 flows across two runs, and the TSQ problem
+below.
+
+### Methods finding: TCP Small Queues counts the emulated switch queue
+
+With two elephants sharing s1 (dev-pilot1, LC1/LR2), neither flow ever lost a
+packet in 10 s, cwnd stayed frozen (25 and 16 segments), and the split was a
+stable 6.4 / 3.2 Mbit/s that depended on history, not on congestion control.
+`ss -tim` showed why: packets in flight (6 to 12) far below cwnd, and the
+sender's sk_wmem_alloc ("skmem t") at 12 to 19 KB while those packets sat in
+the l1-s1 queue. The skbs stay charged to the sending socket through the
+veth into OVS and the HTB queue until the spine's netem orphans them
+(netem_enqueue calls skb_orphan_partial). TCP Small Queues limits a socket to
+about max(2 x truesize, pacing_rate >> 10) bytes below the TCP layer, so here
+it caps each flow at a few packets *in the switch queue*: the 20-packet
+bottleneck never fills, there is almost no loss, and cwnd does not decide
+the rate. On a real host the NIC's TX completion frees the skb as soon as it
+leaves the host, so TSQ only ever sees host-local queues. This is an
+emulation artifact of veth + OVS in one kernel, and it likely explains the
+Chunk 2 observation that a cwnd cut from 43 to 22 cost almost no goodput.
+
+Fix: a 10 us netem on every host NIC (`tc qdisc replace dev hN-eth0 root
+netem delay 0.01ms limit 10000`, topologies/leafspine.py
+`host_qdisc="netem"`). netem orphans on enqueue, so the charge ends when the
+packet leaves the host, as with a real NIC. The limit of 10000 packets is far
+above any BDP here (about 25 packets on the slowest path at 10 Mbit/s), so
+that qdisc never drops; it adds 10 us one way. With it: sk_wmem_alloc 0, in
+flight == cwnd, the uplink drops (87 in 8 s), normal loss-based sharing (5.4 /
+4.1 Mbit/s). Reproducible with `python3 experiments/tsq_check.py --out
+results/tsq/<name>` (both variants back to back; results below).
+
+Decision (Mutahar delegated it via the project coordinator, 14:13 UTC, on my
+recommendation): every run from Chunk 3 on uses `host_qdisc=netem` (the
+runner's default). The Chunk 2 gate stays as recorded (it ran with the
+default qdisc; gate.py never passes the new argument). The gate's R2/C1 pair
+is rerun inside the new runner under both settings (conditions IR2/IC1 of the
+loaded-move campaign), and the whole loaded-move campaign is also run with
+the default qdisc as an ablation.
+
+### Loaded-move experiment: analysis plan (pre-registered before any campaign run)
+
+Scenario `loaded_move` (experiments/traffic.py), ECMP controller with pins:
+E0 = h1 -> h5 (moved), B = h2 -> h6 (competitor). Both start at t0, run 25 s;
+the move is one MODIFY_STRICT at t0 + 10 s; ACKs of both pinned to s1 as in
+the gate; no mice, so h1 carries only E0. Conditions:
+IC1 E0 on s1, sham move (idle); IR2 E0 s4 -> s1 (idle, = gate R2);
+LC1 E0 and B on s1, sham move; LR0 E0 s2 -> s1 with B on s1 (fast->fast,
+no delay gap); LR2 E0 s4 -> s1 with B on s1 (slow->fast, 9 ms gap).
+10 reps per condition, block-randomised order, `--seed 1`.
+
+Goodput G = in-order bytes acknowledged by the receiver in a window
+(receiver-side trace, as in the gate). Windows start at the move's barrier
+reply: W2, W5, W10. Deficit = mean G(reference) - mean G(reroute), Welch
+95 % CI. Contrasts (analysis/loaded_move.py):
+- P1 (primary): E0 deficit in W10, LR2 vs LR0. This isolates the delay-gap
+  effect (reordering, spurious retransmissions, cwnd cut) from the cost of
+  joining a loaded path, which both conditions share. Prediction: deficit > 0;
+  "supported" if the CI lies above zero.
+- S1: E0 deficit LR2 vs LC1, LR0 vs LC1 (the cost of moving onto a loaded
+  path at all) and IR2 vs IC1 (idle, gate replication), in W2, W5, W10; the
+  same for B and for E0 + B, to tell lost capacity from a shift of share.
+- S3: loaded minus idle slow->fast deficit, (LC1 - LR2) - (IC1 - IR2).
+- Reported, not tested: reorder/spurious events and RTOs per run, cwnd
+  before / minimum after / mean over W10, flow-mod latency.
+Primary campaign with host_qdisc=netem; ablation with host_qdisc=default,
+same plan. Anything else in the write-up is labelled post hoc.
+
+### ECMP baseline: what the finish line checks
+
+Descriptive, no hypothesis: `campaign --scenario ecmp_mixed --runs 10
+--seed 1` (seeds 1..10). Checks: dump-group-stats bytes per bucket, mice per
+spine against uniform, elephants per spine and the collision distribution,
+no flow changes path, ACK path = data path; reproducibility by replaying
+seeds 1..3 into a second campaign (same schedule sha256, same spine for every
+flow); elephant goodput, mice FCT p50/p99 (also split by fast and slow spine
+and by the number of elephants sharing the mouse's uplink, Chunk 0 review
+1.5), max link utilisation, retransmissions.

@@ -123,10 +123,32 @@ def build_net(hosts_per_leaf=2, controller_port=6653):
     return net
 
 
-def start_net(net, mbps=10, queue=20, spine_delay_ms=DEFAULT_SPINE_DELAY_MS):
+# Host egress qdisc (Chunk 3, LOG.md "TSQ artifact"). With the hosts' default
+# qdisc a sender's skbs stay charged to its socket (sk_wmem_alloc) through the
+# veth and OVS until the spine's netem orphans them, so TCP Small Queues counts
+# packets waiting in the *switch* queue and caps every flow at a few packets
+# there: the bottleneck never fills and cwnd stops mattering. Real NICs free
+# the skb at TX completion, when it leaves the host. A 10 us netem on each host
+# NIC does the same here (netem orphans the skb on enqueue), so the queue builds
+# in the fabric and TCP is cwnd-limited, as on real hosts.
+# "default" keeps the Chunk 2 behaviour (gate.py never passes this argument).
+HOST_EGRESS_NETEM = "netem delay 0.01ms limit 10000"
+
+
+def start_net(net, mbps=10, queue=20, spine_delay_ms=DEFAULT_SPINE_DELAY_MS,
+              host_qdisc="default"):
     net.start()
     disable_offloads(net)
     tc = configure_links(net, mbps=mbps, queue=queue, spine_delay_ms=spine_delay_ms)
+    if host_qdisc == "netem":
+        for h in net.hosts:
+            c = "tc qdisc replace dev %s-eth0 root %s" % (h.name, HOST_EGRESS_NETEM)
+            out = h.cmd(c + " 2>&1")
+            if out.strip():
+                raise RuntimeError("%s -> %s" % (c, out.strip()))
+            tc.append("%s: %s" % (h.name, c))
+    elif host_qdisc != "default":
+        raise ValueError("host_qdisc must be 'default' or 'netem'")
     net.staticArp()            # no ARP at all: nothing is ever flooded
     for h in net.hosts:        # keep IPv6 ND/RS chatter off the wire
         h.cmd("sysctl -qw net.ipv6.conf.all.disable_ipv6=1")
