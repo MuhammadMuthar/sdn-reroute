@@ -61,6 +61,22 @@
     if (data.status && data.status.note && note) note.textContent = data.status.note;
     if (upd) upd.textContent = data.updated ? 'Last updated ' + data.updated : 'Last updated: never';
 
+    var sofar = document.getElementById('sofar');
+    if (sofar && data.sofar) {
+      var sf = data.sofar;
+      var cols = (sf.table && sf.table.columns) || [];
+      var rows = (sf.table && sf.table.rows) || [];
+      sofar.hidden = false;
+      sofar.innerHTML =
+        '<div class="sofar-head"><span class="tag done">' + esc(sf.verdict) + '</span><h3>' + esc(sf.title) + '</h3></div>' +
+        '<p class="sofar-summary">' + esc(sf.summary) + '</p>' +
+        (rows.length ? '<div class="table-wrap"><table><thead><tr>' + cols.map(function (c) { return '<th>' + esc(c) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+          rows.map(function (r) { return '<tr>' + r.map(function (c, i) { return '<td class="' + (i === 0 ? 'mono' : '') + '">' + esc(c) + '</td>'; }).join('') + '</tr>'; }).join('') +
+          '</tbody></table></div>' : '') +
+        (Array.isArray(sf.notes) && sf.notes.length ? '<ul class="sofar-notes">' + sf.notes.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') + '</ul>' : '') +
+        (sf.source ? '<span class="src">Source: ' + esc(sf.source) + '</span>' : '');
+    }
+
     var numWrap = document.getElementById('numbers');
     if (numWrap && Array.isArray(data.numbers) && data.numbers.length) {
       numWrap.hidden = false;
@@ -75,12 +91,12 @@
       figWrap.innerHTML = data.figures.map(function (f) {
         var body;
         if (f.src) {
-          body = '<img src="' + esc(f.src) + '" alt="' + esc(f.alt || f.title) + '" loading="lazy">';
+          body = '<a href="' + esc(f.src) + '" target="_blank" rel="noopener" title="Open full size"><img src="' + esc(f.src) + '" alt="' + esc(f.alt || f.title) + '" loading="lazy"></a>';
         } else {
           body = '<div class="ph">' + (PLACEHOLDER_SVGS[f.kind] || PLACEHOLDER_SVGS.line) +
             '<span>Not measured yet · produced by Chunk ' + esc(f.chunk) + '</span></div>';
         }
-        return '<article class="fig"><div class="fig-head"><h3>' + esc(f.title) + '</h3><span class="tag' + (f.src ? ' done' : '') + '">' + (f.src ? 'measured' : 'Chunk ' + esc(f.chunk)) + '</span></div>' +
+        return '<article class="fig' + (f.src ? ' measured' : '') + '"><div class="fig-head"><h3>' + esc(f.title) + '</h3><span class="tag' + (f.src ? ' done' : '') + '">' + (f.src ? 'measured' : 'Chunk ' + esc(f.chunk)) + '</span></div>' +
           body + '<div class="fig-foot"><span>' + esc(f.caption) + '</span>' + (f.script ? '<span class="src">' + esc(f.script) + '</span>' : '') + '</div></article>';
       }).join('');
     }
