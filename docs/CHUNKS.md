@@ -1,8 +1,9 @@
 # Chunk plan: Learning the Cost of Rerouting
 
 Source: MUTAHAR's project-chat message of 2026-10-19 (planned with Opus 5.5).
-Section A is that text verbatim. Section B holds the revisions proposed in Chunk 0
-(see CHUNK0_REVIEW.md); they take effect only once MUTAHAR approves them.
+**Active plan: section B** (revised in Chunk 0, see CHUNK0_REVIEW.md). MUTAHAR
+delegated the Chunk 0 decision on 2026-10-19 and the revisions were adopted.
+Section A keeps the original prompts verbatim for reference only.
 
 Standing brief: CLAUDE.md (same folder as this file in the project repo).
 Workflow: one chunk per session. Read STATUS.md and the tail of LOG.md first.
@@ -10,7 +11,7 @@ Verify the finish line by running it, rewrite STATUS.md, commit, summarise.
 
 ---
 
-## A. Original chunk prompts (verbatim)
+## A. Original chunk prompts (verbatim, superseded by section B)
 
 ### Chunk 0: Plan (use plan mode)
 ```
@@ -84,11 +85,11 @@ through the same runner, and a first 4-way comparison exists, even if small.
 
 ---
 
-## B. Proposed revisions from Chunk 0 (pending approval)
+## B. Active chunk prompts (adopted 2026-10-19)
 
 Order stays 1 → 6. Changes are additions inside chunks, plus one move of work from
 Chunk 3 into Chunk 2 and one extra controller in Chunk 4. Reasons are in
-CHUNK0_REVIEW.md, section 3.
+CHUNK0_REVIEW.md, section 3. Later chunk threads paste the prompt below for their chunk.
 
 ### Chunk 1 (revised): Environment
 ```
