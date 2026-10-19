@@ -1,0 +1,93 @@
+{
+  "_comment": "Read by main.js. Later chunks edit this file: set status, add numbers (each with the script that produced it), and set figures[].src to an image under site/results/ once analysis/ has produced it. Never type a number here that did not come from a script.",
+  "updated": null,
+  "status": {
+    "chunk": 1,
+    "headline": "Chunk 1 in progress · environment setup",
+    "note": "No experiment has run. Chunk 1 (environment) is in progress; cloud prep is done and verification on the laptop is pending. The first measurements arrive with Chunk 2, the reordering gate."
+  },
+  "numbers": [],
+  "figures": [
+    {
+      "id": "gate-timeseries",
+      "chunk": 2,
+      "kind": "line",
+      "title": "Goodput around a single reroute",
+      "caption": "Elephant goodput versus time, aligned on the FLOW_MOD, slow-to-fast and fast-to-slow, two delay gaps, 10 repetitions each, against a no-reroute control.",
+      "script": "analysis/gate.py → results/gate/*.csv",
+      "src": null
+    },
+    {
+      "id": "gate-table",
+      "chunk": 2,
+      "kind": "bars",
+      "title": "Damage per move at the gate",
+      "caption": "Spurious retransmissions, reorder events and goodput deficit per move with 95% CIs. Pass criterion is pre-registered in LOG.md before the first run.",
+      "script": "analysis/gate.py",
+      "src": null
+    },
+    {
+      "id": "ecmp-spread",
+      "chunk": 3,
+      "kind": "bars",
+      "title": "ECMP spreading across spines",
+      "caption": "Bytes per select-group bucket from dump-group-stats, showing how often elephants collide under hashing.",
+      "script": "experiments/run_ecmp.py",
+      "src": null
+    },
+    {
+      "id": "stage2-throughput",
+      "chunk": 4,
+      "kind": "bars",
+      "title": "Elephant throughput: ECMP vs Hedera-style vs cooldown-only",
+      "caption": "10 paired runs on the same seeds, mean with 95% CI.",
+      "script": "analysis/compare.py",
+      "src": null
+    },
+    {
+      "id": "stage2-fct",
+      "chunk": 4,
+      "kind": "bars",
+      "title": "Short-flow completion time, p50 and p99",
+      "caption": "Reported per spine class on the delay-asymmetric topology.",
+      "script": "analysis/compare.py",
+      "src": null
+    },
+    {
+      "id": "stage2-damage",
+      "chunk": 4,
+      "kind": "bars",
+      "title": "Reroutes, flaps and retransmissions per policy",
+      "caption": "The damage side of the trade-off. Hedera-style is expected to pay here; ECMP pays nothing.",
+      "script": "analysis/compare.py",
+      "src": null
+    },
+    {
+      "id": "dataset-correlation",
+      "chunk": 5,
+      "kind": "scatter",
+      "title": "Which features predict damage",
+      "caption": "Feature-versus-damage correlation across the deliberate-reroute campaign, with row count and scenario ids.",
+      "script": "analysis/dataset.py",
+      "src": null
+    },
+    {
+      "id": "model-error",
+      "chunk": 6,
+      "kind": "bars",
+      "title": "Prediction error on held-out scenarios",
+      "caption": "MAE of the tree and gradient-boosting models against predict-the-mean and the hand-written formula, plus decision time per flow.",
+      "script": "analysis/model.py",
+      "src": null
+    },
+    {
+      "id": "fiveway",
+      "chunk": 6,
+      "kind": "bars",
+      "title": "Five-way comparison",
+      "caption": "Gain kept versus damage caused for ECMP, Hedera-style, cooldown-only, formula and ML controllers.",
+      "script": "analysis/compare.py",
+      "src": null
+    }
+  ]
+}
