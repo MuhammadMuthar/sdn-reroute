@@ -294,7 +294,10 @@ td.open::before { content: "→ "; color: var(--accent); }
 .figs { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; }
 .fig { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; display: grid; grid-template-rows: auto 1fr auto; }
 .fig .fig-head { padding: .8rem 1rem .4rem; display: flex; justify-content: space-between; gap: .6rem; align-items: baseline; }
-.fig .fig-head h3 { font-size: 1rem; }
+.fig .fig-head h3 { font-size: 1rem; min-width: 0; }
+.fig .fig-head .tag { flex: none; }
+.fig.measured { grid-column: 1 / -1; }
+.fig.measured a { display: block; margin: 0 1rem; border-radius: 6px; overflow: hidden; border: 1px solid var(--line); }
 .fig .ph { aspect-ratio: 16 / 9; max-width: 100%; margin: 0 1rem; border-radius: 6px; display: grid; place-items: center; text-align: center; padding: 1rem;
   background: repeating-linear-gradient(135deg, var(--bg-3) 0 6px, transparent 6px 14px); border: 1px dashed var(--line); color: var(--fg-3); font-size: .85rem; }
 .fig .ph svg { width: 70%; max-width: 220px; height: auto; opacity: .5; }
@@ -304,6 +307,17 @@ td.open::before { content: "→ "; color: var(--accent); }
 .fig img { width: 100%; height: auto; display: block; margin: 0; }
 .fig .fig-foot { padding: .6rem 1rem .9rem; font-size: .85rem; color: var(--fg-2); display: grid; gap: .25rem; }
 .fig .fig-foot .src { font-family: var(--font-mono); font-size: .72rem; color: var(--fg-3); }
+
+/* results so far */
+.sofar { display: grid; gap: 1rem; background: var(--bg-2); border: 1px solid color-mix(in srgb, var(--ok) 45%, var(--line)); border-radius: var(--radius); padding: 1.2rem 1.3rem; }
+.sofar-head { display: grid; gap: .5rem; justify-items: start; }
+.sofar-head h3 { font-size: 1.25rem; }
+.sofar-summary { max-width: 78ch; color: var(--fg-2); }
+.sofar td { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sofar td:nth-child(2) { white-space: normal; min-width: 14ch; }
+.sofar-notes { margin: 0; padding-left: 1.2em; display: grid; gap: .35rem; font-size: .92rem; color: var(--fg-2); max-width: 78ch; }
+.sofar .src { font-family: var(--font-mono); font-size: .75rem; color: var(--fg-3); }
+.fig img { background: #fafafa; }
 
 /* team */
 .team { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
