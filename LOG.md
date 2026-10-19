@@ -115,3 +115,90 @@ muhammad-muthar but with group root: Ubuntu 26.04's `chown` is the Rust
 uutils one (/usr/lib/cargo/bin/coreutils/chown), which does not give
 `user:` the GNU meaning "user's login group". verify.sh now passes the group
 explicitly (`$OWNER:$(id -gn $OWNER)`). Not re-run under sudo after that edit.
+
+## 2026-10-19 Chunk 2: the reordering gate
+
+Remote Control session on the laptop. Plan: CHUNKS.md section B (approved).
+
+### Running without sudo: user namespaces
+
+I have no sudo password. Unprivileged user namespaces work on this laptop
+(`unshare --user --map-root-user --net ...`), and inside one the namespace's
+"root" can create veths, netem/htb qdiscs, and, unexpectedly, kernel-datapath
+OVS bridges (the openvswitch module checks CAP_NET_ADMIN against the network
+namespace's owner). `scripts/userns.sh` wraps a command in fresh user, net,
+pid and mount namespaces with a private /tmp and a private ovsdb-server and
+ovs-vswitchd, then Mininet runs unchanged. Check: `topologies/smoke.py` inside
+it gave pingall 0 % and iperf3 9.44 Mbps (sudo run on the same laptop: 9.45).
+Same kernel TCP, same qdiscs, same OVS kernel datapath; every trial gets brand
+new namespaces and an empty OVS database, which is a stronger reset than
+`mn -c`. Under sudo the runner instead runs on the system OVS with `mn -c`
+before each trial. A short sudo cross-check is planned at the end.
+
+Two AppArmor surprises from running under the desktop app's confinement
+profile: tcpdump refuses signals from us (fixed by letting it stop itself with
+`-G/-W 1`) and tshark cannot open files under this repo's path (fixed by
+feeding the pcap on stdin). Neither affects a run from a normal terminal.
+
+### Design decisions (before any gate run)
+
+- Topology `topologies/leafspine.py`: 2 leaves, 4 spines, 2 hosts per leaf.
+  Every switch egress towards a host or a spine is HTB 10 Mbit/s with a pfifo
+  of 20 packets; spine egress ports carry only netem delay (limit 100, no
+  rate). Delays one way: s1 = s2 = 1 ms, s3 = 5 ms, s4 = 10 ms (gaps 4 and
+  9 ms to s1). Host NICs are not shaped, so the flow's queue sits on the leaf
+  uplink of its current path, as in a real fabric, and not inside the sending
+  host where TCP small queues would hide it. Consequence: at the moment of a
+  move the old path still holds the flow's standing queue, so even fast->slow
+  and fast->fast moves can reorder. That is real rerouting behaviour, and R0
+  (fast->fast, no delay gap) isolates it.
+- Queue 20 packets = about 2x BDP of the slowest path (10 Mbit/s x ~12 ms RTT
+  is ~10 packets), per CHUNKS.md B. Same everywhere.
+- Controller `controllers/gate_ctl.py`: proactive rules, spines and egress
+  leaf forward by destination MAC, the ingress leaf has a 5-tuple rule for the
+  elephant. Reroute = one OFPFC_MODIFY_STRICT on l1, timed at the barrier
+  reply. Control runs send the same flow-mod with the unchanged port (sham
+  move). ACKs always return via s1.
+- Flow: iperf3 h1 -> h3, cubic (kernel default), 20 s, fixed --cport 40001,
+  move at t = 10 s. tcp_metrics flushed in both hosts before each trial; the
+  sender namespace's sysctls are stored in every trial's meta.json.
+
+### Pre-registered pass criterion (written before the first gate run)
+
+Disclosure: three short debugging trials (8 s flows, condition R2) were run
+before this entry to get the runner working (results/gate/dev-pilot1..3, not
+committed and not analysed). The last one completed: 11 retransmissions, 9
+DSACKs and 19 out-of-order segments queued at the receiver in the 2 s after
+the move, and no visible dip in 100 ms goodput beyond one bin. Nothing below
+was changed because of it; the criterion is the one in CHUNKS.md B made
+operational.
+
+Conditions, 10 repetitions each, block-randomised order (seed 20261019):
+R1 s3->s1 and R2 s4->s1 (slow->fast, gaps 4 and 9 ms), R3 s1->s3 and R4
+s1->s4 (fast->slow), R0 s1->s2 (fast->fast); controls C1, C3, C4 stay on
+s1, s3, s4 with a sham move. Each reroute is compared with the control on
+its destination path (R1, R2, R0 vs C1; R3 vs C3; R4 vs C4).
+
+Window W = [t_move, t_move + 2 s), t_move = barrier reply of the flow-mod.
+
+(a) Reorder/spurious event in a trial: the sender's counter deltas over W
+    (snapshots just before the flow-mod and 2 s after the barrier reply) of
+    TcpExtTCPDSACKRecv + TcpExtTCPSACKReorder + TcpExtTCPTSReorder +
+    TcpExtTCPRenoReorder + TcpExtTCPSpuriousRTOs sum to >= 1. (This kernel
+    has no separate TCPRACKReorder counter; RACK reordering is counted in
+    TCPSACKReorder.) A condition meets (a) if >= 6 of its 10 trials have an
+    event.
+(b) Goodput G = in-order bytes delivered in W, from the receiver's
+    cumulative ACK number in the receiver-side capture, in Mbit/s. Deficit =
+    mean G(control on destination path) - mean G(reroute); a condition meets
+    (b) if the Welch 95 % CI of the deficit lies entirely above zero.
+
+Verdict: PASS if R1 and R2 both meet (a) and (b). R0, R3 and R4 are reported
+but not required (no delay-induced reordering is expected fast->slow).
+Anything else is FAIL, and I stop and report without changing the setup,
+the buffer or the kernel. Whatever the verdict, the deficit is reported in
+bytes and as a fraction of the control's 2 s volume so that "significant but
+tiny" is visible; the decision what to do about a tiny effect is Mutahar's.
+Secondary, not part of the verdict: tshark tcp.analysis flags in W,
+retransmissions and reorder counts from the packet traces, the within-trial
+change G(W) - G(2 s before), cwnd from `ss -tin`.
