@@ -61,3 +61,47 @@ script is 90 % so a slower laptop does not fail on noise; the number is always
 printed and logged.
 
 The laptop run (kernel datapath, real sysctls, netem present) is still owed.
+
+## 2026-10-19 Chunk 1 (laptop): native run on the HP EliteBook
+
+Remote Control session on the laptop itself. Machine: Ubuntu 26.04.1 LTS,
+kernel 7.0.0-38-generic, Intel i5-1145G7 (8 threads), 15.5 GB RAM,
+Python 3.14.4. Snapshot: `results/env/muhammad-muthar-HP-EliteBook-840-G8-Notebook-PC-2026-10-19T171202.txt`.
+
+### What was run
+
+- System packages: Mutahar ran by hand (I have no sudo password)
+  `sudo apt-get install -y mininet openvswitch-switch openvswitch-testcontroller iperf3 tshark python3-os-ken`
+  before the repo existed. Afterwards every package in `setup.sh`'s APT_PKGS
+  was present (`dpkg -s`), the openvswitch kernel module was loaded and
+  `openvswitch-switch` active, so `sudo ./setup.sh system` itself was not run
+  on the laptop. python3-os-ken from that command is unused (the venv has its
+  own os-ken); harmless.
+- `./setup.sh venv` on Python 3.14.4: passed first try in 70 s. All pins in
+  requirements.txt have cp314 wheels; no python3.11 fallback needed.
+- `scripts/fake_switch.py 127.0.0.1 6655` against `controllers/run.py` +
+  `learning_switch.py`: PASS on 3.14.
+- `sudo ./scripts/verify.sh` (run by Mutahar, kernel datapath):
+  pingall 0 % loss, iperf3 9.452 Mbps = 94.5 % of 10 Mbps, SMOKE PASS.
+  Row in `results/verify/muhammad-muthar-HP-EliteBook-840-G8-Notebook-PC.csv`.
+- sysinfo confirms netem, htb, tbf and fq_codel all work here, so Chunk 2's
+  unequal path delays can run on this machine.
+
+### Fixes
+
+- `scripts/sysinfo.sh` dumped `net.ipv4.tcp_fastopen_key`, a per-boot secret,
+  into results/env (the repo is public). It now skips that key. The one laptop
+  snapshot already written had the value replaced with a `<redacted ...>`
+  marker; nothing else in it was touched. Also silenced tshark's
+  "running as root" warning that replaced its version line.
+- `scripts/verify.sh` ran as root, so its results/ files came out root-owned
+  and git/analysis could not edit them as the user. It now chowns
+  results/verify and results/env back to `$SUDO_USER` on exit. (Today's files
+  were re-owned by copying them within the user-owned directory.)
+- `setup.sh` needed no change on Ubuntu 26.04 / Python 3.14.
+
+### Not done
+
+- verify.sh was run once on the laptop (plus the cloud run). The fixed
+  verify.sh/sysinfo.sh have only been syntax-checked and run unprivileged,
+  not re-run under sudo.

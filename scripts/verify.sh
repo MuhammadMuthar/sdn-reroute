@@ -27,7 +27,10 @@ CTL_LOG="results/verify/$HOST-$STAMP-controller.log"
 "$VENV/bin/python" controllers/run.py --ofp-tcp-listen-port 6653 controllers/learning_switch.py \
    > "$CTL_LOG" 2>&1 &
 CTL_PID=$!
-trap 'kill $CTL_PID 2>/dev/null; mn -c >/dev/null 2>&1' EXIT
+# Hand the results back to the user who ran sudo, so git and later scripts can edit them.
+OWNER=${SUDO_USER:-}
+trap 'kill $CTL_PID 2>/dev/null; mn -c >/dev/null 2>&1
+      [ -n "$OWNER" ] && chown -R "$OWNER": results/verify results/env 2>/dev/null' EXIT
 for i in $(seq 1 30); do
   "$VENV/bin/python" - <<'PYEOF' && break
 import socket, sys
