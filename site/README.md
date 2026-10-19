@@ -1,5 +1,7 @@
 # Project website
 
+Live at **https://sdn-reroute.vercel.app** (deploys from `main`).
+
 Static site for "Learning the Cost of Rerouting". Plain HTML, CSS and JavaScript,
 no build step, no backend. Open `index.html` in a browser or serve the folder:
 

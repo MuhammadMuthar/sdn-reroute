@@ -612,20 +612,132 @@ total (moved + bystanders) as the single damage number.
 3. `python3 experiments/replay.py --live results/compare/compare-<date> --out results/damage/damage-<date>/jobs.json`, then `runner.py replay --spec ... --out results/damage/damage-<date>` (about 2 runs per event).
 4. Write `analysis/stage2.py` (not started), figures, independent recomputation, STATUS.md.
 
-## 2026-10-19 Chunks 5-6 cloud prep (stopped at the project credit limit)
+## 2026-10-19 Chunk 4 (part 2, cloud): pre-registered analysis plan and analysis/chunk4.py
 
-Cloud thread, no Mininet, branch claude/chunk5-6-prep, PR #7. Code only, no
-results. Done: `controllers/cost.py` (DamageEstimator interface: FormulaCost
-with fixed structure and zero coefficients until fitted, ModelCost loading a
-joblib model, `decide_move` with gain and cost in bytes over a 10 s horizon
-plus the 5 s cooldown; `tests/test_cost.py`), `analysis/damage_dataset.py`
-(one row per moved elephant: controller features from policy_log.jsonl,
-host-side cwnd/unacked/rtt and cwnd asymmetry from the live ss log, labels
-moved / bystander / destination-path total deficit over W2/W5/W10 from the
-matched T/C replay pair, nstat deltas, data dictionary, Spearman table;
-`tests/fixture.py` + `tests/test_damage_dataset.py`). Run tests with
-`.venv/bin/python -m unittest discover tests`.
-NOT done: analysis/damage_model.py (training, leave-seed-out CV, calibration),
-controllers/costaware.py (wire decide_move into hedera._decide as policy
-"cost"), docs/stage2_report.md skeleton, README section. Laptop still owes
-the Chunk 4 campaign, the damage replays, then dataset -> model -> 5-way run.
+Cloud session (no Mininet), while the laptop is paused. Written before the
+comparison campaign or any replay has run; the only Chunk 4 data that exist
+are uncommitted dev pilots (results/*/dev-*, not read here). Nothing below is
+a result.
+
+### Pre-registered analysis plan for the Chunk 4 comparison (16:40 UTC)
+
+Campaign: `runner.py campaign --controllers ecmp,ecmp_mon,hedera,cooldown
+--scenario ecmp_mixed --runs 10 --seed 1`, seeds 1..10, every controller on
+every seed (paired), block-randomised order per seed, host_qdisc=netem, one
+boot. Controller parameters as committed in controllers/hedera.py (poll 1 s,
+elephant >= 1 Mbit/s = 10 % of the link, least-loaded other uplink, greedy
+gain > 0; cooldown-only: gain > 1 Mbit/s and >= 5 s since that flow's last
+move). These are frozen now; a change after seeing data is a new campaign.
+
+Unit of analysis: the run (one seed x one controller), n = 10 per controller.
+Exclusions, decided before looking at metrics: a run with a recorded error,
+or with any elephant that did not finish (elephants_ok < n_elephants), is
+dropped and listed; a seed missing for one controller drops that seed from
+the paired contrasts only. Runs are never re-run to replace a bad one unless
+the whole seed is re-run for all four controllers.
+
+Per-run metrics (experiments/metrics.py, runs.csv), per controller as mean
+± 95 % CI (t, n - 1 df, as analysis/ecmp.py and analysis/gate.py):
+- Benefit: elephant goodput mean of 4 and worst of 4 (Mbit/s, whole run);
+  mice FCT p50 and p99 (ms; failed mice count as infinite, so p99 cannot
+  improve by timing mice out), also p50/p99 per size class (< 10 KB,
+  10-100 KB, >= 100 KB), because the all-mice p99 is dominated by SYN loss
+  (Chunk 3); max link utilisation reported but expected to be 1.0 everywhere.
+- Rerouting behaviour: reroutes per run and per minute, reroute rounds,
+  flaps per minute (A -> B -> A within 10 s), moves of non-elephant flows.
+- Damage proxies, whole run: retransmitted segments (all senders), reorder /
+  spurious events (DSACKRecv + SACKReorder + TSReorder + RenoReorder +
+  SpuriousRTOs), RTOs.
+- Controller cost: stats-collection time per round (p50, max).
+
+Contrasts, paired by seed (difference per seed, mean with a 95 % t CI over
+the 10 differences):
+- Primary P1: Hedera-style minus ECMP, elephant goodput mean of 4.
+  Prediction: > 0 (the dynamic baseline recovers the collision loss; the
+  Chunk 3 ECMP mean was 6.16 Mbit/s with a ceiling near 8.7 when every
+  elephant has its own uplink). "Supported" if the CI lies above zero.
+- Primary P2: Hedera-style minus ECMP, mice FCT p50. Prediction: > 0 (worse),
+  because Hedera spreads the elephants over every uplink and no mouse keeps an
+  elephant-free path (pilot: 69 vs 41 ms, one seed; this is the hypothesis
+  that pilot suggested, pre-registered here before the campaign).
+- Secondary S1: monitor-only minus ECMP on goodput mean, FCT p50, FCT p99.
+  Prediction: CIs include zero (the SYN copy and the counting rules do not
+  change the result). If not, the Hedera and cooldown contrasts are reported
+  against monitor-only as well, since that is their true baseline.
+- Secondary S2: cooldown-only minus Hedera-style on reroutes per minute,
+  flaps per minute and total reorder events. Prediction: <= 0 for all three.
+  Cooldown-only minus Hedera-style on elephant goodput mean: reported, no
+  prediction (the question is how much of the gain the cheap ablation keeps).
+- Everything else in the tables is descriptive.
+
+Per-reroute damage (experiments/replay.py pairs, analysis/chunk4.py):
+- An event is one policy round of a live run in which the controller moved at
+  least one elephant. Each event is replayed as a move run T and a matched
+  no-move run C with the live run's seed (replay.py docstring). A pair is
+  analysed only if both arms finished without error and the uplink captures
+  show every elephant on its intended spine in both arms (as in Chunk 3);
+  excluded pairs are listed.
+- Goodput G of a flow in a window = in-order bytes acknowledged by the
+  receiver in it (receiver-side trace, cumulative ACK, as in Chunks 2-3).
+  Windows start at the T arm's barrier reply, and at the sham move's barrier
+  in C: W2, W5, W10. Primary horizon W10, the others reported.
+- Deficit of a flow = G_C - G_T (positive = the move cost that flow bytes).
+  Three terms per event, in bytes over the window:
+  (1) moved: sum of the deficits of the flows the round moved;
+  (2) bystanders: sum of the deficits of the elephants that were already on a
+      destination path of the round and were not moved;
+  (3) destination-path total: sum over every elephant on the destination
+      path(s) after the move = (1) + (2).
+  Reporting rule: all three terms are always shown side by side. The single
+  damage number for a reroute is term (3), because (1) + (2) + (3) would count
+  the moved flow and the bystanders twice. The moved-flow-only deficit (1)
+  stays as a column, so the write-up can show where it has the wrong sign.
+  Also reported: the deficit summed over all four elephants (what the fabric
+  as a whole lost, including what the flows left behind on the source path
+  gained), reorder / spurious events and RTOs in W2 at the moved flows'
+  senders, and the pre-move 2 s goodput of every elephant in both arms (a
+  pair whose arms differ before the move by more than 10 % of the link rate
+  is flagged).
+- Per controller: mean ± 95 % CI over events of each term at W10 and, per
+  run, the sum of term (3) over the run's events (damage per run), so the
+  benefit in P1 and the damage it cost sit in the same table.
+- Features for Chunk 5: every event row carries the controller's pre-move
+  features of its first move from policy_log.jsonl (rate, U_p, U_q, gain,
+  elephants on p and q, configured delays of p and q, age, previous moves).
+  Reported, not tested: damage against delay gap and against bystander count.
+
+Figures (figures/chunk4_comparison.png, chunk4_damage.png,
+chunk4_tradeoff.png) from analysis/chunk4.py only; tables in
+<campaign>/chunk4_summary.md. Anything in the write-up that is not in this
+plan is labelled post hoc.
+
+### Built
+
+`analysis/chunk4.py` reads <compare>/runs.csv, flows.csv, links.csv and
+<damage>/runs/*/ (plus the live runs' policy_log.jsonl) and writes
+chunk4_summary.md, chunk4_summary.csv, chunk4_contrasts.csv,
+chunk4_events.csv and the three figures. Modes for testing without Chunk 4
+data: `--loaded-check results/loaded/loaded-2026-10-19` runs the damage-term
+code on the Chunk 3 LR2 (move) / LC1 (no move) runs paired by seed, which
+are exactly a T / C pair with E0 moved and B the bystander, and must
+reproduce the Chunk 3 W10 numbers (moved -0.88, bystander +0.86, total
+-0.03 Mbit/s); `analysis/chunk4_fixture.py` writes a synthetic campaign
+(marked SYNTHETIC, figures kept out of figures/) so the Hedera and cooldown
+columns and the replay-pair code paths run end to end before real data
+exist. The committed Chunk 3 ECMP campaign runs through the comparison
+path as a one-controller campaign (its runs.csv predates the reroute
+columns, which the script reports as absent).
+
+### Stopped at the budget limit (16:45 UTC)
+
+Done and checked: the plan above; `analysis/chunk4.py --loaded-check
+results/loaded/loaded-2026-10-19` gives W10 moved -0.884 ± 0.359, bystander
++0.858 ± 0.354, destination-path total -0.025 ± 0.010 Mbit/s, reorder event
+in 9/10 (paired-t CIs; Chunk 3 used Welch), i.e. the Chunk 3 numbers;
+`--compare results/ecmp/ecmp-2026-10-19` reproduces STATUS.md (6.16 ± 0.93 /
+4.23 ± 1.16 Mbit/s, FCT 50.8 / 1210 ms) with the reroute columns reported
+as absent. NOT done: `analysis/chunk4_fixture.py` (synthetic fixture for the
+Hedera / cooldown columns and the replay pairs) was not written, so the
+multi-controller and `--damage` code paths have only run on the Chunk 3
+data through the shared functions; the first real campaign is their test.
+STATUS.md untouched (no results yet).
