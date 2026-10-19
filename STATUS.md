@@ -17,6 +17,7 @@ Last session: Chunk 1, environment, laptop run, 2026-10-19. Chunk 1 is done.
 
 | run | datapath | pingall loss | iperf3 on 10 Mbps TCLinks |
 |---|---|---|---|
+| laptop 2026-10-19T17:33:43 (same CSV, after the script fixes) | kernel | 0 % | 9.512 Mbps (95.1 %) |
 | laptop 2026-10-19T17:12:23 (`results/verify/muhammad-muthar-HP-EliteBook-840-G8-Notebook-PC.csv`) | kernel | 0 % | 9.452 Mbps (94.5 %) |
 | cloud 2026-10-19T11:38:11 (`results/verify/vm.csv`) | userspace | 0 % | 9.53 Mbps (95.3 %) |
 
@@ -39,6 +40,5 @@ in LOG.md. Reuse `disable_offloads()` from `topologies/smoke.py`.
 
 1. Approve the Chunk 0 revisions (docs/CHUNKS.md section B)? Chunk 2 is written
    against them.
-2. Optional: rerun `sudo ./scripts/verify.sh` once to confirm the two script
-   fixes (result files should now be owned by you, and the env snapshot should
-   have no tcp_fastopen_key line).
+2. verify.sh's chown now sets the group explicitly (uutils chown quirk, see LOG.md);
+   the next sudo run will confirm it. Harmless if it doesn't: files are already yours.

@@ -105,3 +105,13 @@ Python 3.14.4. Snapshot: `results/env/muhammad-muthar-HP-EliteBook-840-G8-Notebo
 - verify.sh was run once on the laptop (plus the cloud run). The fixed
   verify.sh/sysinfo.sh have only been syntax-checked and run unprivileged,
   not re-run under sudo.
+
+### Re-run after the fixes (2026-10-19T17:33)
+
+`sudo ./scripts/verify.sh` again: pingall 0 % loss, iperf3 9.512 Mbps =
+95.1 % of 10 Mbps, SMOKE PASS (second row in the laptop CSV). The new env
+snapshot has no tcp_fastopen_key line. Result files came out owned by
+muhammad-muthar but with group root: Ubuntu 26.04's `chown` is the Rust
+uutils one (/usr/lib/cargo/bin/coreutils/chown), which does not give
+`user:` the GNU meaning "user's login group". verify.sh now passes the group
+explicitly (`$OWNER:$(id -gn $OWNER)`). Not re-run under sudo after that edit.
