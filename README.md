@@ -76,3 +76,7 @@ Every number and figure comes from a script in this repo that anyone can rerun.
 Raw data in `results/` is never edited. Negative results are reported. Nothing is
 claimed as new that Hermes (SIGCOMM'17) or FlexDATE (ToN'22) already did; see
 `docs/research_gap.md`.
+
+## Project website
+
+https://sdn-reroute.vercel.app, source in `site/` (see `site/README.md` for how results get onto it).
