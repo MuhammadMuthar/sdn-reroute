@@ -611,3 +611,21 @@ total (moved + bystanders) as the single damage number.
 2. `python3 experiments/runner.py campaign --controllers ecmp,ecmp_mon,hedera,cooldown --scenario ecmp_mixed --runs 10 --seed 1 --out results/compare/compare-<date>` (about 1 h).
 3. `python3 experiments/replay.py --live results/compare/compare-<date> --out results/damage/damage-<date>/jobs.json`, then `runner.py replay --spec ... --out results/damage/damage-<date>` (about 2 runs per event).
 4. Write `analysis/stage2.py` (not started), figures, independent recomputation, STATUS.md.
+
+## 2026-10-19 Chunks 5-6 cloud prep (stopped at the project credit limit)
+
+Cloud thread, no Mininet, branch claude/chunk5-6-prep, PR #7. Code only, no
+results. Done: `controllers/cost.py` (DamageEstimator interface: FormulaCost
+with fixed structure and zero coefficients until fitted, ModelCost loading a
+joblib model, `decide_move` with gain and cost in bytes over a 10 s horizon
+plus the 5 s cooldown; `tests/test_cost.py`), `analysis/damage_dataset.py`
+(one row per moved elephant: controller features from policy_log.jsonl,
+host-side cwnd/unacked/rtt and cwnd asymmetry from the live ss log, labels
+moved / bystander / destination-path total deficit over W2/W5/W10 from the
+matched T/C replay pair, nstat deltas, data dictionary, Spearman table;
+`tests/fixture.py` + `tests/test_damage_dataset.py`). Run tests with
+`.venv/bin/python -m unittest discover tests`.
+NOT done: analysis/damage_model.py (training, leave-seed-out CV, calibration),
+controllers/costaware.py (wire decide_move into hedera._decide as policy
+"cost"), docs/stage2_report.md skeleton, README section. Laptop still owes
+the Chunk 4 campaign, the damage replays, then dataset -> model -> 5-way run.
