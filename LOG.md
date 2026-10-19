@@ -727,3 +727,17 @@ columns and the replay-pair code paths run end to end before real data
 exist. The committed Chunk 3 ECMP campaign runs through the comparison
 path as a one-controller campaign (its runs.csv predates the reroute
 columns, which the script reports as absent).
+
+### Stopped at the budget limit (16:45 UTC)
+
+Done and checked: the plan above; `analysis/chunk4.py --loaded-check
+results/loaded/loaded-2026-10-19` gives W10 moved -0.884 ± 0.359, bystander
++0.858 ± 0.354, destination-path total -0.025 ± 0.010 Mbit/s, reorder event
+in 9/10 (paired-t CIs; Chunk 3 used Welch), i.e. the Chunk 3 numbers;
+`--compare results/ecmp/ecmp-2026-10-19` reproduces STATUS.md (6.16 ± 0.93 /
+4.23 ± 1.16 Mbit/s, FCT 50.8 / 1210 ms) with the reroute columns reported
+as absent. NOT done: `analysis/chunk4_fixture.py` (synthetic fixture for the
+Hedera / cooldown columns and the replay pairs) was not written, so the
+multi-controller and `--damage` code paths have only run on the Chunk 3
+data through the shared functions; the first real campaign is their test.
+STATUS.md untouched (no results yet).
