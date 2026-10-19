@@ -181,13 +181,17 @@ def run_metrics(rd):
              mice_no_spine=int(mi.spine.isna().sum()) if len(mi) else 0,
              mice_start_lag_p99_ms=float(np.nanpercentile(mi.start_lag_s, 99) * 1e3)
              if len(mi) and mi.start_lag_s.notna().any() else np.nan)
-    for lab, sub in (("", ok), ("_fast", ok[ok.spine.isin(FAST)]),
-                     ("_slow", ok[ok.spine.isin({3, 4})])):
-        s["n_mice_ok" + lab] = len(sub)
+    # failed mice count as FCT = infinity in the percentiles (censored), so a
+    # policy that makes mice time out cannot look better in the tail
+    cens = (mi.assign(fct_c=np.where(mi.ok == 1, mi.fct_s, np.inf)) if len(mi)
+            else mi.assign(fct_c=[], fct_s=[]))
+    for lab, sub in (("", cens), ("_fast", cens[cens.spine.isin(FAST)]),
+                     ("_slow", cens[cens.spine.isin({3, 4})])):
+        s["n_mice_ok" + lab] = int((sub.ok == 1).sum())
         if len(sub):
-            s["fct_p50_ms" + lab] = float(np.percentile(sub.fct_s, 50) * 1e3)
-            s["fct_p99_ms" + lab] = float(np.percentile(sub.fct_s, 99) * 1e3)
-            s["fct_mean_ms" + lab] = float(sub.fct_s.mean() * 1e3)
+            s["fct_p50_ms" + lab] = float(np.percentile(sub.fct_c, 50) * 1e3)
+            s["fct_p99_ms" + lab] = float(np.percentile(sub.fct_c, 99) * 1e3)
+            s["fct_mean_ms" + lab] = float(sub[sub.ok == 1].fct_s.mean() * 1e3)
     for k in range(1, 5):
         n = int((mi.spine == k).sum()) if len(mi) else 0
         s["mice_on_s%d" % k] = n

@@ -35,6 +35,7 @@ import csv
 import json
 import os
 import random
+import shutil
 import signal
 import socket
 import struct
@@ -49,8 +50,8 @@ from experiments.gate import SYSCTLS, read_counters, step, wait_port  # noqa: E4
 
 VENV_PY = os.path.join(REPO, ".venv", "bin", "python")
 OF_PORT, CMD_PORT = 6653, 6700
-SS_FILTER = "( sport >= :40001 and sport <= :40999 )"
 SNAPLEN_UPLINK, SNAPLEN_HOST = 96, 128
+LOCAL_PORT_RANGE = "41000 60999"
 
 
 def ctl_cmd(req, timeout=10.0):
@@ -107,7 +108,8 @@ def run(a):
                 host_qdisc=a.host_qdisc,
                 hosts_per_leaf=hpl, spine_delay_ms=list(DEFAULT_SPINE_DELAY_MS),
                 uid=os.getuid(), userns=os.environ.get("SDN_USERNS_INNER") == "1",
-                kernel=os.uname().release, t_wall_start=time.time(), errors=[])
+                kernel=os.uname().release, t_wall_start=time.time(), errors=[],
+                boot_id=open("/proc/sys/kernel/random/boot_id").read().strip())
     ctl_log = open(os.path.join(rd, "controller.log"), "w")
     ctl = subprocess.Popen([VENV_PY, os.path.join(REPO, "controllers", "run.py"),
                             "--ofp-tcp-listen-port", str(OF_PORT),
@@ -147,6 +149,11 @@ def run(a):
                 raise RuntimeError("ping %s -> %s failed:\n%s" % (s, d, out))
         for h in H.values():
             h.cmd("ip tcp_metrics flush all")
+            # ephemeral ports (iperf3 control connections) stay out of the
+            # elephant (40001-40999) and mice (20000-39999) source-port ranges
+            h.cmd("sysctl -qw net.ipv4.ip_local_port_range='%s'" % LOCAL_PORT_RANGE)
+        meta["ip_local_port_range"] = H["h1"].cmd(
+            "sysctl -n net.ipv4.ip_local_port_range").strip()
         meta["sysctl"] = {k: H["h1"].cmd("sysctl -n %s 2>&1" % k).strip() for k in SYSCTLS}
         step("ping ok, metrics flushed")
 
@@ -193,9 +200,11 @@ def run(a):
                 host_caps.append((e, hn))
         ss_period = 0.05 if sched["tagged"] else 0.1
         for hn in sorted({e["src"] for e in sched["elephants"]}):
+            filt = "( %s )" % " or ".join("sport = :%d" % e["sport"]
+                                          for e in sched["elephants"] if e["src"] == hn)
             bg.append(H[hn].popen(
                 "while :; do echo T $(date +%%s.%%N); ss -tinmH '%s'; sleep %g; done"
-                % (SS_FILTER, ss_period), shell=True,
+                % (filt, ss_period), shell=True,
                 stdout=open(os.path.join(rd, "ss_%s.log" % hn), "w"),
                 stderr=subprocess.DEVNULL))
 
@@ -255,6 +264,7 @@ def run(a):
                 meta["errors"].append("move failed: %s" % r)
             meta["moves"].append(dict(mv, reply=r))
             tb = r.get("t_barrier", time.time())
+            snap("m%d_post0" % i)                # counter windows can start here
             step("moved %s -> s%d" % (mv["flow"], mv["spine"]))
             for off in sorted(o for o in sched["snapshots"] if o > 0):
                 time.sleep(max(0.0, tb + off - time.time()))
@@ -384,6 +394,8 @@ def campaign(a):
         if os.path.exists(os.path.join(rd, "run_flows.csv")):
             print("[%d/%d] %s exists, skipping" % (i, len(order), run_id), flush=True)
             continue
+        if os.path.exists(rd):                 # a failed earlier attempt: start clean
+            shutil.rmtree(rd)
         os.makedirs(rd, exist_ok=True)
         sched = make_schedule(resolve(a.scenario, c or None), seed)
         sched["sha256"] = schedule_sha256(sched)

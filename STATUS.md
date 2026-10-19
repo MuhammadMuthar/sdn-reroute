@@ -1,52 +1,90 @@
 # STATUS (rewritten at the end of every session)
 
-Last session: Chunk 2, the reordering gate, laptop, 2026-10-19. Gate status:
-PASSED with a caveat. The pre-registered criterion is met, but single-flow
-damage on an idle path is small. Plan (project recommendation, Mutahar can
-override): go to Chunk 3 and test the damage mechanism under load. Chunk 2
-is closed: the sudo cross-check (verify.sh 9.54 Mbit/s PASS; R2/C1 x3 as
-root on the system OVS) agrees with the rootless campaign.
+Last session: Chunk 3, ECMP baseline and the reusable runner, laptop,
+2026-10-19. Finish line met. Two findings change how the project measures
+damage: an emulation artifact (TCP Small Queues) and the sign of the cost of
+moving onto a loaded path. Next: Chunk 4.
 
 ## What works
 
-- Everything from Chunk 1 (environment, os-ken on Python 3.14, verify.sh;
-  re-verified under sudo 2026-10-19T18:41, 9.54 Mbit/s).
-- `scripts/userns.sh` runs Mininet + kernel OVS without sudo in fresh user/net
-  namespaces; smoke iperf3 9.44 Mbit/s (sudo on the same laptop: 9.45).
-- `topologies/leafspine.py` (2 leaves, 4 spines at 1/1/5/10 ms, 10 Mbit/s,
-  20-packet queues), `controllers/gate_ctl.py` (reroute = one
-  OFPFC_MODIFY_STRICT on the ingress leaf, flow-mod to barrier median 1.15 ms).
-- `experiments/gate.py campaign` runs the 80-trial gate in ~52 min, rootless
-  or under sudo; `analysis/gate.py` writes per_trial.csv, summary.csv,
-  verdict.md and `figures/gate_timeseries.png`.
+- Everything from Chunks 1-2 (environment, rootless Mininet via
+  `scripts/userns.sh`, the gate).
+- `controllers/fabric.py`: shared base for all controllers (static forwarding,
+  pin/move/status/events command channel, OFPT_ERROR-checked flow-mods).
+  `controllers/ecmp.py`: OF1.3 select group per leaf, OVS default dp_hash.
+- `experiments/runner.py campaign --controller <app> --scenario <name> --runs N
+  --seed S --out DIR`: fresh namespaces per run, seeded schedule
+  (`experiments/traffic.py`; iperf3 elephants with fixed --cport, mice from
+  `experiments/mice.py` with FCT), counters of every host, ss, captures on
+  l1's uplinks (path oracle and utilisation), traces of tagged elephants,
+  group/flow/port stats; `experiments/metrics.py` writes runs.csv,
+  flows.csv, links.csv. Scenarios: `ecmp_mixed`, `loaded_move` (conditions
+  IC1, IR2, LC1, LR0, LR2). Chunks 4-6 plug in a new controller app and/or
+  scenario; deliberate moves and pins already work on top of any controller.
+- Host NICs get a 10 us netem by default (`--host-qdisc netem`), which fixes
+  the TSQ artifact; `experiments/tsq_check.py` demonstrates it.
+- Analysis: `analysis/ecmp.py`, `analysis/loaded_move.py`.
 
-## Key numbers (results/gate/gate-2026-10-19/verdict.md)
+## Key numbers
 
-| cond | move | trials with reorder/spurious event | goodput deficit in 2 s vs control |
+ECMP baseline (results/ecmp/ecmp-2026-10-19/summary.md, 10 seeds, 30 s, 4
+elephants + about 1050 mice per run):
+- Spread: mice per spine 2596 / 2617 / 2657 / 2662 (chi-square p = 0.76);
+  group bucket bytes 35 / 25 / 21 / 19 %; no flow ever changed spine; ACKs
+  on the data's spine. Replay of seeds 1-3: same schedule sha256, same spine
+  for 3169 / 3169 flows.
+- Elephant goodput by elephants sharing its uplink: 1 -> 8.70, 2 -> 4.42,
+  3 -> 3.09 Mbit/s; per run mean 6.16 ± 0.93, worst 4.23 ± 1.16.
+- Mice FCT p50 50.8 ± 5.8 ms, p99 1210 ± 100 ms; p99 is mostly lost
+  handshakes (2.3 % of mice wait for the 1 s initial RTO). Max link
+  utilisation is 1.0 in every run, so it will not separate controllers.
+
+Loaded move (results/loaded/loaded-2026-10-19/summary.md, 10 runs x 5
+conditions; E0 moved onto s1 where elephant B runs):
+
+| contrast (W10 = 10 s after the move) | moved flow E0 | bystander B | E0 + B |
 |---|---|---|---|
-| R1 | slow->fast, 4 ms gap | 10/10 | 6.9 KB (0.29 %), CI excludes 0 |
-| R2 | slow->fast, 9 ms gap | 10/10 | 67 KB (2.8 %), CI [0.008, 0.529] Mbit/s |
-| R0 | fast->fast, no gap | 10/10 | 7.5 KB (0.32 %) |
-| R3 | fast->slow, 4 ms gap | 10/10 | 5.0 KB (0.21 %) |
-| R4 | fast->slow, 9 ms gap | 2/10 | 1.1 KB (0.05 %) |
-| C1/C3/C4 | sham move | 0/30 | control |
+| slow->fast (s4->s1) vs fast->fast (s2->s1), P1 | -0.64 [-0.96, -0.32] | +0.63 [0.31, 0.95] | -0.01 |
+| slow->fast vs no move | -0.88 [-1.25, -0.52] | +0.86 [0.50, 1.22] | -0.03 [-0.04, -0.01] |
+| idle slow->fast vs no move (gate R2 replication), W2 | +0.10 [0.03, 0.17] | | |
 
-R2's deficit is mostly 3 of 10 trials that hit an RTO; the other 7 lose
-10.8 KB each (post-hoc table in verdict.md). Retransmissions after a move are
-almost all spurious (retrans ≈ DSACKs). Slow->fast moves cut cwnd (R2 43 -> 22
-segments) and the kernel never undoes it, but with one flow on an idle path
-the cut costs almost no goodput.
+Deficits in Mbit/s, reference minus reroute (negative = the reroute did
+better). Pre-registered prediction (P1 > 0) not supported: the moved flow
+gains, the bystander pays, total goodput hardly changes.
+
+Ablation with the old host qdisc (results/loaded/loaded-default-2026-10-19):
+P1 flips to +2.46 Mbit/s [1.77, 3.14] (47 %), with frozen cwnds and almost no
+loss. Idle IR2 vs IC1 W2 80 KB, 3.3 % (gate R2 67 KB, 2.8 %): the new runner
+reproduces the gate under the old setting.
+
+TSQ check (results/tsq/tsq-2026-10-19): old qdisc, 14-29 KB of each sender's
+skbs charged while queued in the switch, packets out / cwnd 0.5-0.67, 27
+drops; fixed, 0 KB, 1.00, 118 drops.
+
+Every number above was recomputed from raw data by an independent agent
+with its own code: all confirmed (LOG.md).
+
+## Decisions made this session (LOG.md has the evidence)
+
+1. Host-NIC netem for every run from Chunk 3 on; Chunk 2 stays as recorded.
+2. Damage = moved flow + bystanders on the destination path + lost total,
+   each vs its matched no-move control; moved-flow-only kept as a column
+   (CHUNKS.md section B amendment). Both decided through the project
+   coordinator on delegated authority, on this thread's recommendation.
 
 ## Next
 
-Chunk 3 (ECMP baseline and traffic generator, CHUNKS.md section B). Carry this into Chunk 3: the mechanism to test under
-load is spurious retransmissions after a slow->fast move plus a cwnd cut the
-kernel never undoes (TCPDSACKUndo = TCPLossUndo = 0 in all 80 trials). On an
-idle path the cut only drains the standing queue; with competing flows it
-should cost throughput share. Unmeasured so far.
+Chunk 4 (CHUNKS.md B): Hedera-style + cooldown-only controllers as
+FabricController apps, ECMP vs Hedera vs cooldown-only, 10 paired seeds on
+`ecmp_mixed`, three-term damage per reroute. Watch-outs: use elephant goodput
+and FCT (not max link utilisation) to separate controllers; FCT p99 is
+dominated by SYN loss, so also report p99 by size class; every right-hand host
+receives one elephant, so mice share their last hop with it.
 
 ## Open questions for Mutahar
 
-1. Gate recorded as passed with a caveat and the plan is to go to Chunk 3
-   (recommended in the project chat). Override if you would rather add a
-   gate condition with background load first.
+1. Optional: `sudo ./scripts/chunk3_sudo.sh` (about 4 min) repeats the TSQ
+   check and two ECMP seeds as real root on the system OVS, a consistency
+   check like Chunk 2's. Everything in Chunk 3 ran rootless.
+2. Paper framing: the TSQ artifact plus its effect on the loaded-move sign is
+   a methods result in its own right; worth a section?

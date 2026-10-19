@@ -143,8 +143,9 @@ hysteresis margin, no damage estimate) as the cheap ablation. Then run ECMP vs
 Hedera-style vs cooldown-only, 10 paired runs each (same seeds), and produce
 the Stage 2 figures with 95% CIs: elephant throughput, short-flow FCT p50/p99,
 max link utilization, reroutes/min, flaps/min, retransmissions and reorder
-events. Finish line: figures in figures/ from one analysis script, and a results
-summary in STATUS.md I can turn into the milestone report.
+events, and per reroute the three-term damage (below). Finish line: figures in
+figures/ from one analysis script, and a results summary in STATUS.md I can turn
+into the milestone report.
 ```
 
 ### Chunk 5 (revised): Damage dataset
@@ -152,9 +153,11 @@ summary in STATUS.md I can turn into the milestone report.
 Chunk 5: automated campaign of deliberate reroutes under varied conditions
 (flow rate, delay gap and direction, load on old and new path, time since last
 move, number of previous moves, concurrent flows). For each move record the
-controller-visible features and the measured damage: goodput deficit relative
-to the steady state reached on the new path, retransmitted, spurious and
-reordered segments (nstat deltas primary, tshark secondary), cwnd undo events.
+controller-visible features (including the moved flow's cwnd/rate at arrival
+relative to the flows already on the new path) and the measured three-term
+damage (below), plus the moved-flow-only deficit as its own column;
+retransmitted, spurious and reordered segments (nstat deltas primary, tshark
+secondary), cwnd undo events.
 Tag each row with a scenario id for grouped train/test splits. Finish line: a
 dataset CSV with a data dictionary, a feature-vs-damage correlation table and
 plot, and the row count.
@@ -162,7 +165,8 @@ plot, and the row count.
 
 ### Chunk 6 (revised): Model and proposed controller
 ```
-Chunk 6: train decision tree and gradient boosting to predict the damage label,
+Chunk 6: train decision tree and gradient boosting to predict the damage label
+(the three-term damage; C_hat is their sum, each term also reported),
 evaluate on held-out scenario groups against two baselines (predict-the-mean and
 the hand-written formula), report MAE and decision time per flow. Implement the
 cost-aware controller in both variants (formula, model) on top of the Chunk 4
@@ -171,6 +175,20 @@ Finish line: all five controllers (ECMP, Hedera-style, cooldown-only, formula,
 ML) run through the same runner, and a first 5-way comparison exists, even if
 small.
 ```
+
+### Amendment after Chunk 3 (2026-10-19): what "damage" means
+
+The Chunk 3 loaded-move test (LOG.md, Chunk 3) found that a slow->fast move onto
+a path that already carries an elephant does not hurt the moved flow: it arrives
+with a larger window and takes share from the flow already there, while total
+goodput barely changes. Damage measured on the moved flow alone can therefore
+be negative under load. From Chunk 4 on, the damage of a reroute is three terms,
+each a goodput deficit over a fixed horizon against its matched no-move control:
+(1) the moved flow, (2) the flows already on the destination path (bystanders),
+(3) lost total goodput on that path. C_hat predicts these (their sum drives the
+rule); the moved-flow-only deficit is kept as a reported column. Decided on the
+project coordinator's delegated authority, 2026-10-19 15:16 UTC, on the Chunk 3
+thread's recommendation.
 
 ### Chunk 7 (Stage 3 head start, not for the free day)
 k=4 fat-tree topology with ARP handling, mid-run link degrade, the AI-round

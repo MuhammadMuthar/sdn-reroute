@@ -60,6 +60,7 @@ class FabricController(app_manager.OSKenApp):
         self.spine_of_dpid = {d: k for k, d in self.lay["spine_dpid"].items()}
         self.dps = {}            # dpid -> datapath, once its rules are installed
         self.barriers = {}       # xid -> hub.Event
+        self.of_errors = {}      # xid -> error text, from OFPT_ERROR replies
         self.path_log = []       # every pin/move with timing (not `events`: OSKenApp uses that name)
         addr = ("127.0.0.1", int(os.environ.get("FABRIC_CMD_PORT", "6700")))
         self.server = hub.StreamServer(addr, self._serve)
@@ -119,7 +120,9 @@ class FabricController(app_manager.OSKenApp):
         mod = parser.OFPFlowMod(datapath=dp, priority=prio, match=match,
                                 instructions=inst,
                                 command=ofp.OFPFC_ADD if command is None else command)
+        dp.set_xid(mod)
         dp.send_msg(mod)
+        return mod.xid
 
     def _barrier(self, dp, timeout=5.0):
         req = dp.ofproto_parser.OFPBarrierRequest(dp)
@@ -130,6 +133,13 @@ class FabricController(app_manager.OSKenApp):
         ok = ev.wait(timeout=timeout)
         self.barriers.pop(req.xid, None)
         return bool(ok)
+
+    @set_ev_cls(ofp_event.EventOFPErrorMsg, [CONFIG_DISPATCHER, MAIN_DISPATCHER])
+    def error_msg_handler(self, ev):
+        m = ev.msg
+        self.of_errors[m.xid] = "type=%d code=%d" % (m.type, m.code)
+        self.logger.error("OFPT_ERROR from %016x xid=%d: %s", m.datapath.id, m.xid,
+                          self.of_errors[m.xid])
 
     @set_ev_cls(ofp_event.EventOFPBarrierReply, [CONFIG_DISPATCHER, MAIN_DISPATCHER])
     def barrier_reply_handler(self, ev):
@@ -148,12 +158,16 @@ class FabricController(app_manager.OSKenApp):
         dp = self.dps[self.lay["leaf_dpid"][leaf]]
         ofp, parser = dp.ofproto, dp.ofproto_parser
         t_sent = time.time()
-        self._flow(dp, PRIO_PIN, self._pin_match(parser, f),
-                   [parser.OFPActionOutput(int(spine))],
-                   command=ofp.OFPFC_MODIFY_STRICT if modify else ofp.OFPFC_ADD)
-        ok = self._barrier(dp)
-        rep = dict(ok=ok, t_sent=t_sent, t_barrier=time.time(), leaf=leaf,
+        xid = self._flow(dp, PRIO_PIN, self._pin_match(parser, f),
+                         [parser.OFPActionOutput(int(spine))],
+                         command=ofp.OFPFC_MODIFY_STRICT if modify else ofp.OFPFC_ADD)
+        ok = self._barrier(dp)      # an error reply precedes the barrier reply
+        t_barrier = time.time()
+        err = self.of_errors.pop(xid, None)
+        rep = dict(ok=ok and err is None, t_sent=t_sent, t_barrier=t_barrier, leaf=leaf,
                    spine=int(spine))
+        if err:
+            rep["of_error"] = err
         self.path_log.append(dict(rep, cmd="move" if modify else "pin", flow=f,
                                 origin=origin))
         return rep

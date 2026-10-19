@@ -324,6 +324,7 @@ def main():
             if key != "E0_cwnd":                 # 0.5 s moving average for readability
                 k = np.ones(5) / 5
                 arr = np.array([np.convolve(a, k, mode="same") for a in arr])
+                arr[:, :2] = arr[:, -2:] = np.nan    # the average is incomplete there
             ax.plot(x, arr.mean(0), ls, color=COLORS[c], lw=1.4,
                     label="%s: %s (n=%d)" % (c, LABEL[c], len(arr)))
     axes[0].set_ylabel("E0 goodput, Mbit/s\n(0.5 s avg)")
@@ -334,12 +335,16 @@ def main():
         ax.axvline(0, color=INK2, lw=0.8, ls=":")
         ax.spines[["top", "right"]].set_visible(False)
         ax.grid(axis="y", color="#e6e5df", lw=0.6)
-    axes[0].legend(frameon=False, fontsize=7.5, loc="lower right")
+    h, lab = axes[0].get_legend_handles_labels()
+    fig.legend(h, lab, frameon=False, fontsize=7.5, loc="lower center", ncol=2)
     axes[0].set_title("Moving E0 onto s1, idle (dashed) or shared with elephant B (solid); "
                       "mean over runs", fontsize=9, color=INK, loc="left")
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0.07, 1, 1))
     os.makedirs(os.path.join(REPO, "figures"), exist_ok=True)
-    fig.savefig(os.path.join(REPO, "figures", "loaded_move_timeseries.png"), dpi=150)
+    name = "loaded_move_timeseries%s.png" % (
+        "" if json.load(open(os.path.join(camp, "plan.json"))).get("host_qdisc", "netem")
+        == "netem" else "_default_qdisc")
+    fig.savefig(os.path.join(REPO, "figures", name), dpi=150)
     print("\n".join(L))
 
 

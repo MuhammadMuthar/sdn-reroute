@@ -392,3 +392,161 @@ seeds 1..3 into a second campaign (same schedule sha256, same spine for every
 flow); elephant goodput, mice FCT p50/p99 (also split by fast and slow spine
 and by the number of elephants sharing the mouse's uplink, Chunk 0 review
 1.5), max link utilisation, retransmissions.
+
+### Campaigns run (2026-10-19, from 19:17 PKT; `scripts/chunk3_campaigns.sh`)
+
+All rootless, one boot (boot_id b2163657-5325-447c-8649-05780f57dc59, up
+since 14:22 PKT), host_qdisc=netem unless stated. In order: ECMP 10 runs,
+ECMP replay of seeds 1-3, TSQ check, loaded move (50 runs), loaded move with
+host_qdisc=default (ablation, 50 runs). Every run finished with status ok.
+
+### Code review (independent agent, before any campaign result was read)
+
+No bug that changes a number in the pilots. Fixed in the analysis before the
+campaigns finished: ss cwnd series now keyed to the exact socket (an iperf3
+control port could fall into the ss filter range); the receiver out-of-order
+trace count no longer counts loss repairs; a loaded run with a missing B
+trace becomes NaN, not B = 0; every loaded run is checked against the
+uplink captures (E0, B and ACKs on the intended spines) and excluded
+otherwise (none were); ECMP runs with a recorded error or a failed
+elephant are excluded (none were). Fixed in the runner, controller and
+metrics only after the campaigns (each run re-imports them, so a mid-campaign
+edit would mix code versions): exact-port ss filter, hosts'
+ip_local_port_range moved to 41000-60999 (out of the elephant and mice port
+ranges), OFPT_ERROR replies make a pin/move report ok=false, a counter
+snapshot right after the barrier, boot_id in meta, clean run dir on retry,
+failed mice counted as FCT = infinity in percentiles (0 failures in these
+campaigns, so no number changes).
+
+### Result: ECMP baseline (results/ecmp/ecmp-2026-10-19/summary.md)
+
+Finish line met: `runner.py campaign --scenario ecmp_mixed --runs 10 --seed 1`
+wrote runs.csv / flows.csv / links.csv for 10 of 10 runs.
+- Spreading: dump-group-stats bytes per bucket s1..s4 35 / 25 / 21 / 19 %
+  (elephants dominate); mice per spine 2596 / 2617 / 2657 / 2662 (chi-square
+  vs uniform p = 0.76); elephants per spine 16 / 10 / 8 / 6. Busiest uplink
+  carried 1 / 2 / 3 elephants in 1 / 6 / 3 runs (uniform hashing: 9 / 70 /
+  19 %). No flow ever used two spines; ACKs always on the data's spine.
+- Reproducibility: replaying seeds 1-3 gave identical schedule sha256 (3/3),
+  identical elephant placement (3/3) and the same spine for 3169 of 3169
+  flows. Metrics replay closely (mean elephant goodput 4.46 vs 4.48, 4.42 vs
+  4.41, 6.53 vs 6.60; FCT p50 identical to 0.1 ms; p99 950 vs 1090 ms for
+  seed 1, the tail is noisy).
+- Elephant goodput is set by collisions: alone on an uplink 8.70 Mbit/s
+  (n=19), sharing with one other 4.42 (n=12), with two others 3.09 (n=9).
+  Mean of 4 per run 6.16 ± 0.93, worst 4.23 ± 1.16, sum 24.6 ± 3.7 Mbit/s.
+- Mice FCT p50 50.8 ± 5.8 ms, p99 1210 ± 100 ms; 2.3 % of mice lose their
+  SYN or SYN-ACK and wait for the 1 s initial RTO, and those are 87 % of the
+  mice slower than 0.9 s, so p99 is mostly that. FCT depends on the mouse's
+  own uplink (p50 40 ms with no elephant there, 248 ms with three) and on
+  its last hop, which every right-hand host shares with one elephant.
+  Fast vs slow spines barely differ (p50 58.8 vs 52.0 ms), because elephant
+  load, not propagation delay, dominates FCT here (Chunk 0 review 1.5).
+- Max link utilisation is 1.0 in every run (some uplink is always full), so
+  it will not separate controllers on this workload; elephant goodput and
+  FCT will.
+
+### Result: TSQ check (results/tsq/tsq-2026-10-19/tsq_check.md)
+
+Default host qdisc: sk_wmem_alloc 14-29 KB while packets sit in the switch,
+packets out / cwnd 0.5-0.67 (ss unacked), 27 uplink drops in 10 s, split 6.3 / 3.2 Mbit/s.
+netem host qdisc: 0 bytes, packets out / cwnd 1.00 (median; above 1 during loss recovery), 118 drops, 4.7 / 4.8.
+
+### Result: loaded move, host_qdisc=netem (results/loaded/loaded-2026-10-19/summary.md)
+
+50 of 50 runs analysed, all passed the path check. The pre-registered primary
+prediction is **not supported; the effect has the opposite sign**:
+- P1, E0 in W10, LR2 vs LR0: deficit -0.637 Mbit/s [-0.955, -0.319]
+  (-796 KB, -13 %). Moving E0 from the slow s4 onto the shared s1 left it with
+  *more* goodput than moving it from the fast s2. W2 -1.51 [-2.07, -0.95],
+  W5 -0.91 [-1.43, -0.40].
+- The other flow pays: B in W10 LR2 4.15 vs LC1 5.00 Mbit/s (deficit 0.86
+  [0.50, 1.22], 17 %); vs LR0 0.63 [0.31, 0.95].
+- Total goodput on s1 barely changes: E0 + B in W10 LR2 vs LC1 -0.025 Mbit/s
+  [-0.037, -0.014] (-0.27 %), W2 -1.4 %. A move onto a loaded path mostly
+  shifts share between flows; it destroys little capacity.
+- Mechanism (inference from the counters, not tested): E0 arrives from the
+  10 ms path with a larger cwnd (25 vs 19 segments before the move), keeps a
+  larger one afterwards (mean over W10 11.1 vs 9.8 for LR0, 9.3 for LC1)
+  and so takes share from B. Reordering still happens (reorder/spurious
+  events in W2 in 9/10 LR2 runs vs 4/10 LR0, 0/10 LC1; DSACKs 2.7 vs 1.0 vs
+  0) and cwnd is still cut (25 -> 8), but the cut lands on a flow that
+  starts ahead; no RTOs under load.
+- Idle replication of the gate's R2 under the fix (IR2 vs IC1): W2 deficit
+  0.103 Mbit/s [0.034, 0.173] = 26 KB, 1.1 % (gate, default qdisc: 67 KB,
+  2.8 %); events 9/10; an RTO in W10 in 6/10 runs (gate 3/10 in W2).
+- Joining a loaded path at all (LR0 vs LC1, E0) is not distinguishable from
+  no move in W10: -0.25 [-0.62, 0.12].
+This contradicts the expectation in STATUS ("with competing flows the cut
+should cost throughput share"). Reported to Mutahar with a question on how
+damage should be defined from Chunk 4 on (moved flow only, or also the flows
+on the destination path and the total).
+
+### Definition change: damage has three terms (decided 15:16 UTC)
+
+Decision (project coordinator, on delegated authority, following this
+thread's recommendation): from Chunk 4 on, the damage of a reroute =
+goodput deficit of the moved flow + deficit of the flows already on the
+destination path + lost total goodput on that path, each against its matched
+no-move control, over a fixed horizon; C_hat gets the three terms, and the
+moved-flow-only deficit stays as a reported column so the write-up can show
+why that definition fails under load. Evidence: the loaded-move result above
+(LR2 vs the no-move control LC1 over W10: moved flow -0.88 Mbit/s, i.e. it
+gained, bystander +0.86, total -0.03). The moved
+flow's cwnd at arrival relative to the flows on the new path (25 vs about 10
+segments here) is recorded as a candidate feature for the Chunk 5 dataset.
+CHUNKS.md section B now carries this (amendment after Chunk 3; section A
+untouched).
+
+### Independent recomputation (second agent, own code, raw data only)
+
+Every number above in the ECMP, loaded-move and TSQ results was recomputed
+from the raw per-run files with independently written scripts (receiver ACK
+traces, spine_flows.csv, iperf3 JSON, mice CSVs, counters.json,
+tsq_check.json): all CONFIRMED to the reported precision, including the P1
+CI, the path checks (50/50), mice per spine and the replay's 3169/3169
+flows. Notes it raised: tsq_check.md's "in flight" is ss `unacked`
+(relabelled "packets out"; 15 of 52 netem samples exceed 1.2 x cwnd during
+loss recovery, the median ratio is 1.00); samples are about 0.23 s apart,
+not 0.2 s (text fixed; report regenerated with `--report-only`); each trace
+ends with the receiver's RST at about 25 s, outside every window; under load
+E0's first packet appears on s1 15-33 ms after the barrier (queueing ahead of
+the capture point), 1-2 ms when idle.
+
+### Result: loaded-move ablation, host_qdisc=default (results/loaded/loaded-default-2026-10-19/summary.md)
+
+Same plan, same code, the Chunk 2 host qdisc (TSQ artifact present). 50 of
+50 runs, all passed the path check. The primary effect **flips sign**:
+- P1, E0 in W10, LR2 vs LR0: deficit +2.456 Mbit/s [1.768, 3.144] (3.07 MB,
+  47 %). LR2's E0 settles at 2.79 Mbit/s against B's 6.79, LR0's at 5.25.
+- Almost nothing is lost or retransmitted under load (E0 retrans in W10:
+  LR2 0.3, LR0 3.5, LC1 0); cwnd never moves (LR2 38 -> 38, LC1 17.5); the
+  split is fixed within milliseconds of the move and then stays flat, and in
+  the no-move control it depends on the run (LC1 E0 4.54 ± 1.29 Mbit/s). The
+  shares are set by TSQ and pacing, not by congestion control.
+- Idle (IR2 vs IC1), which is what the gate measured: W2 deficit 0.319
+  [0.061, 0.578] = 80 KB, 3.3 %, events 10/10, an RTO in 4/10; the gate's R2
+  (gate.py, same qdisc) was 67 KB, 2.8 %, 3/10 RTOs. So the new runner
+  reproduces the gate under the old setting.
+- Total goodput on s1 again barely changes (LR2 vs LC1 W10 -0.17 %).
+
+Reading: with the artifact, a Mininet study would conclude that moving an
+elephant from a slow path onto a shared fast path costs it about half its
+throughput; on the corrected setup the same move makes it *gain* 13 % over a
+no-gap move, at the bystander's expense. The single-flow idle numbers move
+much less (2.8-3.3 % vs 1.1 %). The artifact matters most exactly where the
+project's question lives, on loaded paths. This and the TSQ check are the
+methods result of Chunk 3.
+
+### Runner fixes applied after the campaigns, smoke-tested
+
+`scratch/post_campaign_patch.py` (not committed; the changes are in the diff)
+applied the staged review fixes. Smoke test: one LR2 and one ecmp_mixed run
+(results/*/dev-postfix, not committed): status ok, every pin/move ok=true
+under the OFPT_ERROR check, boot_id and ip_local_port_range (41000-60999)
+recorded, iperf3 control ports now 43334-60008 (outside both flow port
+ranges), the ss log holds only the elephant's socket, the new m0_post0
+snapshot exists, seed 1 placement unchanged (E1:s2 E2:s1 E3:s2 E4:s2). One
+bug found by the smoke test and fixed: the censored-FCT code failed on runs
+without mice. All four campaigns' per-run metrics and CSVs were regenerated
+with the final metrics.py; the ECMP runs.csv files came out byte-identical.
