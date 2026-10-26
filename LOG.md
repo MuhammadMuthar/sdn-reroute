@@ -944,3 +944,166 @@ number. Findings:
 Edits to the runner, controllers or metrics: none (each run re-imports
 them). Only analysis/chunk4.py and tests/test_chunk4.py changed (one new
 test; 27 of 27 pass).
+
+### Campaigns run (all rootless, one boot, `scripts/chunk4_campaigns.sh`)
+- Comparison: 40 of 40 runs ok, 13:33-14:18 UTC, 63-70 s per run; no run
+  excluded.
+- `replay.py`: 25 events (Hedera-style 10, cooldown-only 15) from 18 live
+  runs; no problem flagged (every live run's controller view matched its
+  captures); 7 moves of non-elephant flows not replayed (large mice of
+  228-947 KB; in 5 the pin came after the mouse's last packet).
+- Replays: 50 of 50 runs ok, 14:19-15:17 UTC, 61-75 s per run; every pair
+  passed the path check, none excluded.
+
+### Result: comparison (results/compare/compare-2026-10-26/chunk4_summary.md, figures/chunk4_comparison.png)
+Mean ± 95 % CI over 10 seeds, ECMP / monitor-only / Hedera-style /
+cooldown-only:
+- Elephant goodput, mean of 4: 5.94 ± 1.04 / 5.96 ± 1.03 / 8.54 ± 0.11 /
+  8.49 ± 0.11 Mbit/s; worst of 4: 4.60 ± 1.09 / 4.52 ± 1.10 / 8.33 ± 0.17 /
+  8.31 ± 0.16.
+- Mice FCT p50 50.5 ± 6.7 / 49.5 ± 6.3 / 63.3 ± 1.8 / 63.4 ± 2.4 ms; p99
+  1157 ± 63 / 1149 ± 66 / 1131 ± 32 / 1113 ± 16 ms; no mouse failed.
+- Reroutes per run 0 / 0 / 1.9 ± 0.8 / 2.4 ± 1.2 (3.8 and 4.8 per minute);
+  one flap in 40 runs (cooldown-only seed 9: E4 s2 -> s3 at 1.98 s, back at
+  7.01 s, just after its 5 s cooldown). Max link utilisation 0.99-1.00
+  everywhere, as expected.
+Pre-registered contrasts, paired by seed:
+- P1, Hedera-style - ECMP, goodput: +2.59 [1.62, 3.56] Mbit/s: supported.
+- P2, Hedera-style - ECMP, FCT p50: +12.8 [5.6, 20.0] ms (worse): supported.
+- S1, monitor-only - ECMP: goodput +0.015 [-0.007, 0.037] Mbit/s and FCT p99
+  -7.9 [-65.5, 49.7] ms as predicted; FCT p50 -0.96 [-1.84, -0.07] ms, CI just
+  excludes zero. As the plan says, Hedera-style and cooldown-only are then
+  also reported against monitor-only: P1 +2.58 [1.62, 3.53] Mbit/s and P2
+  +13.8 [7.0, 20.5] ms, both supported; cooldown-only +2.53 [1.60, 3.46]
+  Mbit/s, +13.9 [7.9, 19.9] ms.
+- S2, cooldown-only - Hedera-style: reroutes/min +1.0 [-1.3, 3.3], flaps/min
+  +0.2 [-0.25, 0.65], reorder events +57 [-59, 172]: none supported
+  (predicted <= 0); goodput -0.05 [-0.11, 0.01] Mbit/s (reported).
+Reading: both dynamic controllers do the same thing here. In their first one
+or two rounds (1.4-2.9 s after t0, elephants still in slow start) they spread
+the 4 elephants one per uplink; after that no move has a positive gain. Seed
+1 had no ECMP collision and neither moved anything. So the cooldown and the
+margin have nothing to suppress; cooldown-only's extra reroutes are two moves
+in seed 2 in the elephants' last second (28.96 s, 29.97 s) and the one flap.
+Spreading the elephants leaves no uplink without one, hence P2.
+
+### Finding: the monitoring reorders about half of the mice inside the leaf (post hoc)
+Monitor-only never moves a flow, yet its senders counted 1018 ± 84
+reorder / spurious events per run against 2.8 ± 2.2 for ECMP (mostly
+TcpExtTCPSACKReorder; the receivers' TcpExtTCPDSACKOldSent 167 vs 1.6 per
+run, so spurious retransmissions too), and Hedera-style and cooldown-only
+the same (986, 1042). `analysis/mice_reorder.py` uses each flow's IPv4 ID
+order on l1's uplinks to find packets that left l1 in another order than
+their sender sent them (results/compare/compare-2026-10-26/mice_reorder.md):
+- Mice with a reordered packet per run, of about 1057: ECMP 0 (0.4),
+  monitor-only 467 ± 26, Hedera-style 464 ± 39, cooldown-only 476 ± 39;
+  reordered mouse packets 0 / 1239 / 1235 / 1287 per run. Elephant packets
+  0 / 1 / 9 / 16 per run (the last two at policy moves).
+- No mouse changed spine under monitor-only (10,532 of 10,532 on one
+  uplink): reordering inside l1, not a path change.
+- A reordered mouse packet comes a median 18-25 ms after the mouse's SYN.
+  Pooled by the time from the SYN to the mouse's next packet on the uplink:
+  within 20 ms 51-52 % of mice are reordered, 20-50 ms 39-43 %, 50-100 ms
+  16-33 %, after 100 ms 0-1 % (ECMP 0 % in every bin).
+Mechanism (inference from the timing, not confirmed with OVS's own counters):
+the controller installs each new flow's prio-150 counting rule on the SYN's
+packet-in; when that rule reaches l1 while the flow's first packets pass,
+Open vSwitch moves the flow to a new datapath flow, and packets that went
+through the slow path (upcall) leave after later ones. Mice whose first
+packets pass after the rule is in place are not reordered.
+Consequences: (1) every monitoring controller's whole-run reorder counters
+measure this, not rerouting, so S2's reorder contrast cannot see reroute
+damage; (2) FCT barely moves (S1); (3) the per-reroute damage below was
+measured in replays under the plain ECMP controller, which does not have
+it; (4) the Chunk 6 controllers share the monitoring. A methods result like
+the TSQ artifact.
+
+### Result: per-reroute damage (chunk4_summary.md, chunk4_events.csv, figures/chunk4_damage.png, chunk4_tradeoff.png)
+25 events, every pair analysed. Deficit = no-move minus move, Mbit/s, mean ±
+95 % CI over events:
+- Hedera-style (10): W10 moved 0.020 ± 0.034, bystanders 0 (no Hedera-style
+  move went onto an uplink with another elephant), destination-path total
+  0.020 ± 0.034, all four elephants 0.014 ± 0.113; W2 total 0.004 ± 0.073.
+- cooldown-only (15): W10 moved -0.045 ± 0.134, bystanders -0.043 ± 0.092
+  (one event had one), destination-path total -0.088 ± 0.142, all four
+  -0.083 ± 0.195; W2 total -0.457 ± 0.584.
+- Damage per run (term 3 at W10 summed over the run's events): Hedera-style
+  0.03 ± 0.04 MB, cooldown-only -0.16 ± 0.32 MB; benefit over ECMP 38.9 ±
+  14.5 and 38.2 ± 14.1 MB per run.
+- The moves do reorder the moved flows. Their own sockets (ss, W2):
+  reord_seen 7.2 ± 4.6 (Hedera-style) and 6.2 ± 3.4 (cooldown-only),
+  dsack_dups 7.6 ± 4.6 and 3.3 ± 1.5, 0 in every no-move arm; a reordering
+  in 8 of 10 and 12 of 15 events. The plan's host counters had an RTO in W2
+  in 10 of 10 move arms and 9 of 10 no-move arms (Hedera-style): the mice's,
+  as the review expected.
+- 22 of 25 events in the first 3 s. The first moved elephant shared its
+  uplink with another elephant in 19 of 25 (by the captures); the
+  controller's own count (elephants_on_p) called it alone in 16 of 25, true
+  in 6, because a flow's path is known one round after it crosses 1 Mbit/s.
+- Reported, not tested (Pearson r of term 3 at W10 against the features, n =
+  25): predicted gain 0.05, rate 0.24, elephants on the destination -0.46 (p
+  = 0.02; one event with a bystander drives it), delay gap 0.20.
+- Post hoc sensitivity (from the independent recomputation): in 5 events a
+  moved flow or bystander started 0.6-2.2 s late in one arm (its first SYN
+  lost at a full uplink queue, so the arms did not carry the same flows when
+  the window opened; cooldown-only seed 5 round 10 alone gives -0.79 Mbit/s).
+  Without them and the 2 truncated events: destination-path total at W10
+  +0.025 ± 0.041 (Hedera-style, 8 events), +0.016 ± 0.077 Mbit/s
+  (cooldown-only, 11 events); W2 -0.024 ± 0.047 and -0.131 ± 0.124. The
+  plan's exclusion rules did not foresee this, so the main table keeps them.
+Reading: on this workload a reroute costs no measurable goodput (the
+destination-path total is within ±0.15 Mbit/s of zero at W10 for both
+controllers), although it does reorder the moved flow. That fits Chunk 3
+(total goodput on the destination barely changes) and Chunk 2 (a few % for
+the moved flow, idle). These moves leave a shared uplink for an empty one
+early in the flow's life; Chunk 5's deliberate moves are what can show
+damage under other conditions.
+
+### Fixes after results were read (each checked; no pre-registered number changed)
+1. analysis/chunk4.py: when an elephant ends, its receiver answers the last
+   data with RSTs without the ACK flag (ack 0 in the trace), which counted
+   as a cumulative ACK of 0, so the two events whose windows reach the end
+   (cooldown-only seed 2, 28.96 s and 29.97 s) gave +54 and -63 Mbit/s over
+   W2. Only packets with the ACK flag count now (unit test
+   test_goodput_ignores_the_receivers_closing_rsts). Only those two events
+   change; `--loaded-check` unchanged (W10 -0.884 / +0.858 / -0.025).
+2. analysis/chunk4.py: the review's descriptive "alone on its uplink" line
+   now uses the capture-checked placement, with the controller's count next
+   to it; figure tick labels.
+3. experiments/metrics.py: numpy 2.x's percentile returns NaN once its
+   interpolation touches inf, so a failed mouse (FCT = inf by design) would
+   have made FCT p50/p99 NaN (found by the independent recomputation).
+   `censored_percentile`, tests/test_metrics.py. No mouse failed in any
+   campaign (Chunks 3-4), so no number changes; the 90 Chunk 4 runs' metrics
+   were regenerated after the replays and every CSV came out byte-identical.
+4. analysis/mice_reorder.py: packets with IP ID 0 and no payload are the
+   kernel's replies for a socket in TIME_WAIT, not the socket's counter; they
+   made ECMP look like 31 reordered mice per run (found by the independent
+   recomputation). Excluded.
+
+### Independent recomputation (agent with its own code, raw files only)
+Comparison: every per-controller mean and CI and every pre-registered
+contrast confirmed to the reported precision (P1 +2.5930 [1.6245, 3.5614],
+S1 FCT p50 -0.9564 [-1.8402, -0.0726], S2 reroutes/min +1.00 [-1.26, 3.26]),
+the reorder counters, and the per-flow reordering with its own pcap reader
+(TIME_WAIT packets excluded: 0.4 / 466.7 / 464.3 / 476.6 mice per run); all
+43 policy moves agree with the captures (last packet before the barrier on
+the old uplink, later ones on the new); 42,128 of 42,128 mice ok; each
+seed's schedule identical across the four controllers. Damage: all 25 pairs
+pass its path check in both arms, every term confirmed (e.g. W10
+destination-path total +0.0204 ± 0.0342 and -0.0880 ± 0.1423; per run 25.5 ±
+43.2 KB and -165 ± 321 KB), its traces match its own decode of the receiver
+pcaps, and the ss counts match (ESTAB samples only, as chunk4.py reads them).
+Notes it raised, all handled above or below: the closing-RST, late-start,
+TIME_WAIT and NaN-percentile points; the ss window start matters (taking the
+first sample after the move instead of the last before it would miss most
+reorderings, which show up within 4-94 ms); in 15 of 25 events the move came
+less than 2 s after t0, so the pre-move window covers the elephants'
+start-up; 5 of the 7 non-elephant moves came after the mouse had finished.
+
+### What to check / open
+- The monitoring artifact needs a decision before Chunk 6 (STATUS.md, open
+  question 1) and a direct check of the mechanism with OVS's upcall counters
+  (`ovs-appctl dpctl/show` lookups missed, ECMP vs monitor-only, two runs).
+- Chunk 5 should produce reroutes in steady state and onto loaded paths; on
+  ecmp_mixed the controllers only move at flow start onto empty uplinks.

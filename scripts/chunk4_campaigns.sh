@@ -18,4 +18,6 @@ $R experiments/runner.py replay --spec results/damage/damage-$D/jobs.json \
   --out results/damage/damage-$D > results/damage/damage-$D.console.log 2>&1
 .venv/bin/python analysis/chunk4.py --compare results/compare/compare-$D \
   --damage results/damage/damage-$D
+# post hoc: per-flow reordering inside l1 (needs the local uplink pcaps)
+.venv/bin/python analysis/mice_reorder.py results/compare/compare-$D
 echo ALL DONE

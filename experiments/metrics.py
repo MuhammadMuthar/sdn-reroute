@@ -54,6 +54,17 @@ SIZE_CLASSES = (("lt10k", 0, 10e3), ("10k_100k", 10e3, 100e3), ("ge100k", 100e3,
 RCV_CTRS = ["TcpExtTCPOFOQueue", "TcpExtTCPDSACKOldSent"]
 
 
+def censored_percentile(x, q):
+    """np.percentile with failed mice as FCT = +inf. numpy 2.x returns NaN as
+    soon as its linear interpolation touches inf (even with weight 0), so
+    interpolate on a finite stand-in and report inf for any result above the
+    largest finite value (i.e. one that leans on a failed mouse)."""
+    x = np.asarray(x, float)
+    fin = x[np.isfinite(x)]
+    p = float(np.percentile(np.where(np.isfinite(x), x, 1e12), q))
+    return np.inf if not len(fin) or p > fin.max() else p
+
+
 def group_buckets(path):
     """{(switch, bucket): (packets, bytes)} from dump-group-stats."""
     out, sw = {}, None
@@ -241,15 +252,15 @@ def run_metrics(rd):
                      ("_slow", cens[cens.spine.isin({3, 4})])):
         s["n_mice_ok" + lab] = int((sub.ok == 1).sum())
         if len(sub):
-            s["fct_p50_ms" + lab] = float(np.percentile(sub.fct_c, 50) * 1e3)
-            s["fct_p99_ms" + lab] = float(np.percentile(sub.fct_c, 99) * 1e3)
+            s["fct_p50_ms" + lab] = censored_percentile(sub.fct_c, 50) * 1e3
+            s["fct_p99_ms" + lab] = censored_percentile(sub.fct_c, 99) * 1e3
             s["fct_mean_ms" + lab] = float(sub[sub.ok == 1].fct_s.mean() * 1e3)
     for lab, lo, hi in SIZE_CLASSES:
         sub = cens[(cens["size"] >= lo) & (cens["size"] < hi)] if len(cens) else cens
         s["n_mice_" + lab] = int(len(sub))
         if len(sub):
-            s["fct_p50_ms_" + lab] = float(np.percentile(sub.fct_c, 50) * 1e3)
-            s["fct_p99_ms_" + lab] = float(np.percentile(sub.fct_c, 99) * 1e3)
+            s["fct_p50_ms_" + lab] = censored_percentile(sub.fct_c, 50) * 1e3
+            s["fct_p99_ms_" + lab] = censored_percentile(sub.fct_c, 99) * 1e3
     if len(mi):
         s["mice_connect_gt_0p9s_frac"] = float((mi.connect_s > 0.9).mean())
     for k in range(1, 5):

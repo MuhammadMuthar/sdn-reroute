@@ -70,6 +70,7 @@ from experiments.moves import flow_key, policy_moves  # noqa: E402
 WINDOWS = (2.0, 5.0, 10.0)
 PRIMARY_W = 10.0
 PRE_W = 2.0
+LATE_START_S = 0.5      # post hoc: a connection this late lost its first SYN
 BASELINE = "ecmp"
 CTRL_ORDER = ["ecmp", "ecmp_mon", "hedera", "cooldown", "costaware_formula", "costaware_ml"]
 CTRL_LABEL = {"ecmp": "ECMP", "ecmp_mon": "ECMP, monitor only",
@@ -161,12 +162,31 @@ def read_jsonl(path):
 
 
 def acks(rd, fid):
+    """(t, cumulative ACK) of the receiver's packets that carry an ACK. When an
+    elephant ends, its receiver answers the last data packets with RSTs
+    without the ACK flag (ack 0 in the trace), which must not count as an ACK
+    (found when two events near the end of a run gave +-60 Mbit/s over W2)."""
     p = os.path.join(rd, "recv_%s_trace.csv.gz" % fid)
     if not os.path.exists(p):
         return None
     t = pd.read_csv(p)
-    a = t[t.dir == 1]
+    a = t[(t["dir"] == 1) & ((t["flags"] & 0x10) != 0)]     # t.flags is pandas' own attribute
     return a.t_us.to_numpy() / 1e6, a.ack.to_numpy().astype(float)
+
+
+def start_lag(rd, fid, sched):
+    """Seconds from an elephant's scheduled start to its first packet at the
+    receiver (its SYN), NaN without a trace. About a second when the first SYN
+    was lost at a full uplink queue (post hoc, independent recomputation)."""
+    p = os.path.join(rd, "recv_%s_trace.csv.gz" % fid)
+    if not os.path.exists(p):
+        return np.nan
+    t = pd.read_csv(p, usecols=["t_us", "dir"])
+    d = t[t["dir"] == 0]
+    if not len(d):
+        return np.nan
+    e = {x["id"]: x for x in sched["elephants"]}[fid]
+    return float(d.t_us.min()) / 1e6 - e["start"]
 
 
 def goodput_bytes(rd, fid, tm):
@@ -422,12 +442,14 @@ def arm_measure(rd, elephants, expected, moved_src_hosts, moved=()):
         got = capture_spines(rd, fid)
         if got != sorted(want):
             bad.append("%s data on %s, expected %s" % (fid, got, sorted(want)))
+    res["lag"] = {}
     for fid in elephants:
         g = goodput_bytes(rd, fid, tm)
         if g is None:
             bad.append("%s: no receiver trace" % fid)
             continue
         res["G"][fid] = g
+        res["lag"][fid] = start_lag(rd, fid, sched)
     res["path_check"] = "; ".join(bad) if bad else "ok"
     c = json.load(open(os.path.join(rd, "counters.json")))
     if "m0_pre" in c and "m0_+2" in c and moved_src_hosts:
@@ -456,7 +478,10 @@ def event_row(T, C, ev, elephants, src_of):
     row = dict(n_moved=len(moved), moved=";".join(moved), n_bystanders=len(bystanders),
                bystanders=";".join(bystanders), dest_spines=";".join("s%d" % s for s in sorted(dest)),
                src_spines=";".join("s%d" % s for s in sorted(src)),
-               n_left_behind=len(left_behind))
+               n_left_behind=len(left_behind),
+               # elephants on the first moved flow's uplink before the move, itself
+               # included (placement checked against the captures; post hoc)
+               n_eleph_on_src_pre=sum(1 for f in elephants if pre[f] == pre[moved[0]]))
     for w in WINDOWS:
         def deficit(fids):
             return sum(C["G"][f][w] - T["G"][f][w] for f in fids)
@@ -481,6 +506,12 @@ def event_row(T, C, ev, elephants, src_of):
         for k, _ in SS_KEYS:                    # post hoc, the moved flows' sockets
             row["ss_%s_W2_%s" % (k, arm)] = R.get("ss_W2", {}).get(k, np.nan)
     row["event_W2"] = int(row.get("events_W2_T", 0) >= 1)
+    # post hoc (independent recomputation): a moved flow or bystander whose
+    # connection started late in either arm (lost SYN), so the arms did not
+    # carry the same flows when the window opened
+    lags = [R.get("lag", {}).get(f, np.nan) for R in (T, C) for f in list(moved) + bystanders]
+    row["max_start_lag_s"] = float(np.nanmax(lags)) if np.isfinite(lags).any() else np.nan
+    row["late_start_flag"] = int(row["max_start_lag_s"] > LATE_START_S)
     return row
 
 
@@ -614,6 +645,19 @@ def damage_tables(events, ctrls, runs, perrun, secs):
           "not exclude them. Events whose W%g runs past the end of the elephants (deficit over "
           "a shorter span): %d of %d." % (PRIMARY_W, int(events.w10_truncated.sum()),
                                            len(events))]
+    if "late_start_flag" in events:
+        keep = events[(events.late_start_flag == 0) & (events.w10_truncated == 0)]
+        L += ["", "Post hoc sensitivity (independent recomputation): a moved flow or bystander "
+              "whose connection started more than %.1f s late in either arm (its first SYN was "
+              "lost, so the arms did not carry the same flows when the window opened): %d "
+              "events. Without them and without the W%g-truncated events, destination-path "
+              "total, Mbit/s:" % (LATE_START_S, int(events.late_start_flag.sum()), PRIMARY_W), "",
+              "| controller | events kept | W2 | W5 | W10 |", "|---|---|---|---|---|"]
+        for c in present:
+            e = keep[keep.controller == c]
+            L.append("| %s | %d of %d | %s |" % (
+                CTRL_LABEL.get(c, c), len(e), int((events.controller == c).sum()),
+                " | ".join(fmt_ci(e["dest_total_mbps_W%g" % w]) for w in WINDOWS)))
     if "ss_reord_seen_W2_T" in events and events.ss_reord_seen_W2_T.notna().any():
         L += ["", "Post hoc (added in the code review, before any result was read): the W2 "
               "counters in the last column are the sender hosts' counters, which in ecmp_mixed "
@@ -640,16 +684,20 @@ def damage_tables(events, ctrls, runs, perrun, secs):
     L += ["", "Post hoc, descriptive (code review): when the events happened (seconds after "
           "t0; the elephants start in the first 0.5 s, so an event before about 3 s has its "
           "pre-move window in their slow start), and how often the first moved elephant was "
-          "alone on its uplink (feature elephants_on_p = 1: greedy gain > 0 then moves it only "
-          "because U_p - r_f, i.e. the mice on p plus the error of the 1 s rate estimate, "
-          "exceeds U_q):", ""]
+          "alone on its uplink before the move, by the placement checked against the captures "
+          "(greedy gain > 0 then moves it only because U_p - r_f, i.e. the mice on p plus the "
+          "error of the 1 s rate estimate, exceeds U_q) and as the controller counted it "
+          "(feature elephants_on_p = 1; a flow's path is known one round after it crosses 1 "
+          "Mbit/s, so early rounds undercount):", ""]
     for c in present:
         e = events[events.controller == c]
         t = e.t_event_s.astype(float)
         L.append("- %s: event time median %.1f s (min %.1f, max %.1f), %d of %d before 3 s; "
-                 "first moved elephant alone on its uplink in %d of %d" % (
+                 "first moved elephant alone on its uplink in %d of %d (controller's count: "
+                 "%d of %d)" % (
                      CTRL_LABEL.get(c, c), t.median(), t.min(), t.max(), int((t < 3).sum()),
-                     len(e), int((e.feat_elephants_on_p == 1).sum()), len(e)))
+                     len(e), int((e.n_eleph_on_src_pre == 1).sum()), len(e),
+                     int((e.feat_elephants_on_p == 1).sum()), len(e)))
     L += ["", "Damage per run: sum of term (3) at W%g over the run's events, MB. A run "
           "without a reroute of an elephant counts 0; a run with an event that has no "
           "analysed pair is left out (its sum would be incomplete). Benefit: the run's "
@@ -718,10 +766,11 @@ def fig_comparison(runs, ctrls, path):
             m, h = mean_ci(x)
             ax.errorbar([i], [m], yerr=[0 if np.isnan(h) else h], fmt="o", ms=6,
                         color=CTRL_COLOR.get(c, INK2), mec=INK, mew=0.8, capsize=3, lw=1.4)
-            ax.annotate(fmt(m), (i, m), xytext=(8, 0), textcoords="offset points",
-                        fontsize=7, color=INK, va="center")
+            ax.annotate("%.0f" % m if abs(m) >= 100 else fmt(m), (i, m), xytext=(8, 0),
+                        textcoords="offset points", fontsize=7, color=INK, va="center")
         ax.set_xticks(range(len(ctrls)))
-        ax.set_xticklabels([CTRL_LABEL.get(c, c).replace(", ", ",\n") for c in ctrls], fontsize=7)
+        ax.set_xticklabels([CTRL_LABEL.get(c, c).replace(", ", ",\n").replace("-", "-\n")
+                            for c in ctrls], fontsize=7)
         ax.set_xlim(-0.6, len(ctrls) - 0.4)
         ax.set_ylabel(lab, fontsize=8, color=INK)
         ax.set_ylim(bottom=0)

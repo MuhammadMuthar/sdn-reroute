@@ -2,6 +2,7 @@
 every planted damage term, exclusion, feature and per-run sum must come back.
 Venv only (numpy, pandas, scipy, matplotlib), no Mininet; builds the fixture
 once, about a minute."""
+import gzip
 import json
 import os
 import subprocess
@@ -194,6 +195,21 @@ class TestUnits(unittest.TestCase):
             self.assertEqual(chunk4.ss_delta(s, 5.0, 9.0),
                              dict(retrans=0, reord_seen=0, dsack_dups=0))
             self.assertEqual(chunk4.ss_socket(d, "h2", 40001, 90.0), [])
+
+    def test_goodput_ignores_the_receivers_closing_rsts(self):
+        """RSTs without the ACK flag (ack 0 in the trace) acknowledge nothing."""
+        rows = ["t_us,dir,seq,ack,len,flags,sack"]
+        for i in range(1, 31):                       # an ACK of 1000 bytes every 0.1 s
+            rows.append("%d,1,1,%d,0,16," % (i * 100000, i * 1000))
+        for i in range(31, 41):                      # then the closing RSTs
+            rows.append("%d,1,2,0,0,4," % (i * 100000))
+        with tempfile.TemporaryDirectory() as d:
+            with gzip.open(os.path.join(d, "recv_E1_trace.csv.gz"), "wt") as f:
+                f.write("\n".join(rows) + "\n")
+            g = chunk4.goodput_bytes(d, "E1", 2.05)
+            self.assertEqual(g["pre"], 20000.0)         # ACKs at 0.1 .. 2.0 s
+            for w in chunk4.WINDOWS:                    # ACKs at 2.1 .. 3.0 s, then RSTs
+                self.assertEqual(g[w], 10000.0, w)
 
     def test_event_features_skip_a_mouse_moved_first(self):
         def rec(sport, dport, rate):
