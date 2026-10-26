@@ -1319,3 +1319,12 @@ C_hat about 0 and the cost-aware controller will act like cooldown-only.
 Recommendation: before Chunk 6, one pilot campaign looking for the regime
 where damage exists (e.g. 50-100 Mbit/s links or larger delay gaps, where
 more packets are reordered than RACK absorbs), then Chunk 6.
+
+### Chunk 3's optional root cross-check: dropped (21:11 UTC)
+`scripts/chunk3_sudo.sh` (TSQ check and two ECMP seeds as real root) was
+never run: neither results/tsq/sudo-check-2026-10-19 nor
+results/ecmp/sudo-check-2026-10-19 exists on the laptop or in git. Mutahar
+asked for nothing to be left open from Chunk 3; it is dropped as not needed,
+because Chunk 2's root cross-check (results/gate/sudo-check-2026-10-19)
+already showed rootless and real-root runs agree, and every chunk since used
+the same rootless setup. The script stays in scripts/ if a reviewer asks.

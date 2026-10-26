@@ -75,6 +75,11 @@ independent agent with its own code: all confirmed (LOG.md).
    16:11 UTC).
 2. Chunk 5 rate caps by kernel pacing instead of iperf3 -b (post hoc, this
    thread, LOG.md).
+3. The optional Chunk 3 root cross-check (`scripts/chunk3_sudo.sh`) is
+   dropped, not run (Mutahar, 21:11 UTC): Chunk 2's root cross-check
+   (results/gate/sudo-check-2026-10-19) already showed that the rootless
+   setup gives the same results as real root on the system OVS, and every
+   chunk since used that same rootless setup. Nothing from Chunk 3 is open.
 
 ## Next
 
@@ -91,6 +96,5 @@ pairs + chunk4), then the 5-way comparison. But see open question 1 first.
    damage exists (higher link rate, e.g. 50-100 Mbit/s, or larger delay gaps,
    so more packets are reordered than RACK's window absorbs), one pilot campaign;
    (c) both, (b) first. Recommendation: (c).
-2. Optional, from Chunk 3: `sudo ./scripts/chunk3_sudo.sh` (about 4 min).
-3. Paper framing: TSQ plus the monitoring artifact as one methods section,
+2. Paper framing: TSQ plus the monitoring artifact as one methods section,
    and "reroute damage is small on modern Linux TCP" as a finding?
