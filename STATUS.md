@@ -87,9 +87,17 @@ Chunk 6 (CHUNKS.md B): `analysis/damage_model.py --data
 results/dataset/dataset-2026-10-26/dataset/dataset.csv` (13 groups: 12 spine
 pairs + chunk4), then the 5-way comparison. But see open question 1 first.
 
+Damage-regime pilot at 100 Mbit/s (results/dataset/regime-2026-10-26/
+regime_pilot.md, 16 trials, not independently recomputed): slow -> fast
+moves reorder 10-50x more than at 10 Mbit/s but the destination path still
+loses nothing (W10 -0.02 % ± 0.09 of the link); only fast -> slow moves onto
+an empty path cost something (the flow ramps to the larger BDP: 6-12 % of the
+link in W2, 1-2 % over W10, n = 2). By the pre-stated rule Chunk 6 runs as
+planned (10 Mbit/s).
+
 ## Open questions for Mutahar
 
-1. The damage label is about zero on this setup (10 Mbit/s, 1-10 ms paths,
+1. (Pilot done, see above; Chunk 6 as planned unless you prefer 100 Mbit/s.) The damage label is about zero on this setup (10 Mbit/s, 1-10 ms paths,
    CUBIC with RACK and DSACK undo). A cost-aware controller trained on it will
    predict C_hat about 0 and behave like cooldown-only. Options: (a) run Chunk
    6 as planned and report that honestly; (b) first look for the regime where

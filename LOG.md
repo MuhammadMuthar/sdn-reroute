@@ -1357,3 +1357,23 @@ independent recomputation unless the result changes Chunk 6's design).
 - Feasibility (results/dataset/dev-regime, 1 trial, not committed): an
   elephant alone reaches 95.5 Mbit/s, no capture drops, runs 87-91 s; the
   slow -> fast move's socket saw 109 reorderings in W2 (about 2 at 10 Mbit/s).
+
+### Result (results/dataset/regime-2026-10-26/regime_pilot.md, analysis/regime_pilot.py)
+32 of 32 runs ok (87-91 s), all 16 trials passed every check. Deficit =
+no-move minus move, share of the 100 Mbit/s link, mean ± 95 % CI:
+- slow -> fast (8 trials): destination-path total W2 -0.14 % ± 0.48, W10
+  -0.02 % ± 0.09. The moved flow's socket saw 14-109 reorderings in W2 (about
+  2 at 10 Mbit/s) and up to 91 retransmissions, yet the path lost nothing.
+  The decision rule (slow -> fast, CI above zero, >= 1 %) is not met.
+- fast -> slow onto an empty uplink (s1 -> s4, 2 trials): the moved flow lost
+  12 % and 6 % of the link in W2 and 2.4 % and 1.1 % over W10 (it must grow
+  its window to the 10 ms path's larger BDP); onto a loaded uplink the total
+  is again about zero (-0.12 % at W10). Same delay: about zero.
+- With an elephant on the destination, the moved term is large (up to 25 %
+  of the link in W2) and the bystander's opposite: share moves, the total
+  stays within ±0.6 % in W2.
+Reading: at 100 Mbit/s reroutes reorder far more but the destination path
+still loses nothing measurable, except a fast -> slow move onto an empty path,
+where the moved flow ramps up to the longer path (1-2 % over 10 s, n = 2).
+By the pre-stated rule Chunk 6 runs as planned; the fast -> slow ramp is the
+only damage found and is reported. Not independently recomputed (pilot).
