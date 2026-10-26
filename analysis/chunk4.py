@@ -41,7 +41,10 @@ windows W2, W5, W10 from the barrier reply of the (sham) move. Deficit of a
 flow = G_C - G_T (bytes; positive = the move cost it). Per event: moved =
 sum over the moved flows; bystanders = sum over the elephants already on a
 destination path and not moved; dest_total = moved + bystanders, the single
-damage number. all_total = sum over every elephant.
+damage number. all_total = sum over every elephant. Post hoc (code review):
+ss_<counter>_W2_<arm> = the moved flows' own sockets' retransmissions,
+reord_seen and dsack_dups over W2, from the senders' ss logs, because the
+plan's host counters also count each sender host's mice.
 """
 
 import argparse
@@ -49,6 +52,7 @@ import glob
 import gzip
 import json
 import os
+import re
 import sys
 
 import matplotlib
@@ -121,6 +125,13 @@ DESCRIPTIVE_CONTRAST_METRICS = ["eleph_goodput_mean", "eleph_goodput_min", "fct_
 FEATURES = ["rate_mbps", "U_p", "U_q", "gain_mbps", "elephants_on_p", "elephants_on_q",
             "delay_ms_p_config", "delay_ms_q_config", "age_s", "n_prev_moves",
             "since_last_move_s", "bytes_so_far"]
+# Post hoc (Chunk 4 code review, before any result was read): the plan's W2
+# counters are the sender hosts' nstat counters, and in ecmp_mixed every sender
+# host also runs mice (their SYN-loss RTOs included), so they are not the moved
+# flow's own as in Chunk 3. These are the moved flows' sockets, from ss.
+SS_KEYS = (("retrans", re.compile(r"\bretrans:\d+/(\d+)")),
+           ("reord_seen", re.compile(r"\breord_seen:(\d+)")),
+           ("dsack_dups", re.compile(r"\bdsack_dups:(\d+)")))
 
 
 # ---------------------------------------------------------------- helpers
@@ -182,6 +193,46 @@ def capture_spines(rd, fid):
 
 def counter_delta(c, a, b, hosts, names):
     return {n: sum(c[b][h].get(n, 0) - c[a][h].get(n, 0) for h in hosts) for n in names}
+
+
+def ss_socket(rd, host, sport, t0):
+    """[(t - t0, {counter: cumulative value})] of the socket with local port
+    `sport` in ss_<host>.log(.gz) (experiments/runner.py); [] without a log.
+    A counter missing from a line is 0: ss prints these only once non-zero."""
+    p = os.path.join(rd, "ss_%s.log" % host)
+    if not os.path.exists(p) and os.path.exists(p + ".gz"):
+        p += ".gz"
+    if not os.path.exists(p):
+        return []
+    op = gzip.open if p.endswith(".gz") else open
+    out, t, mine = [], None, False
+    with op(p, "rt") as f:
+        for line in f:
+            if line.startswith("T "):
+                t = float(line.split()[1]) - t0
+            elif line[:1] not in ("\t", " "):        # "ESTAB 0 0 local:port peer:port"
+                parts = line.split()
+                mine = len(parts) >= 4 and parts[3].rsplit(":", 1)[-1] == str(sport)
+            elif mine and t is not None and "cwnd:" in line:
+                vals = {}
+                for k, rx in SS_KEYS:
+                    m = rx.search(line)
+                    vals[k] = int(m.group(1)) if m else 0
+                out.append((t, vals))
+    return out
+
+
+def ss_delta(samples, a, b):
+    """{counter: value at the last sample at or before b minus at or before a}."""
+    def at(t):
+        v = {k: 0 for k, _ in SS_KEYS}
+        for ts, vals in samples:
+            if ts > t:
+                break
+            v = vals
+        return v
+    va, vb = at(a), at(b)
+    return {k: vb[k] - va[k] for k, _ in SS_KEYS}
 
 
 # ---------------------------------------------------------------- comparison
@@ -351,9 +402,10 @@ def event_features(moves, first):
     return f
 
 
-def arm_measure(rd, elephants, expected, moved_src_hosts):
+def arm_measure(rd, elephants, expected, moved_src_hosts, moved=()):
     """One replay arm: per-elephant goodput per window, path check, counters.
-    `expected` = {fid: sorted spines the captures must show}."""
+    `expected` = {fid: sorted spines the captures must show}; `moved` = the
+    event's moved elephants, whose sockets' ss counters are summed over W2."""
     meta = json.load(open(os.path.join(rd, "meta.json")))
     sched = json.load(open(os.path.join(rd, "schedule.json")))
     res = dict(errors=" | ".join(meta.get("errors") or []), path_check="ok", G={})
@@ -384,6 +436,11 @@ def arm_measure(rd, elephants, expected, moved_src_hosts):
         res["events_W2"] = sum(d[k] for k in EVENT)
         res["rto_W2"] = d["TcpExtTCPTimeouts"]
         res["retrans_W2"] = d["TcpRetransSegs"]
+    eleph = {e["id"]: e for e in sched["elephants"]}
+    ss = [ss_socket(rd, eleph[f]["src"], eleph[f]["sport"], t0) for f in moved if f in eleph]
+    if moved and len(ss) == len(moved) and all(ss):
+        ds = [ss_delta(s, tm, tm + WINDOWS[0]) for s in ss]
+        res["ss_W2"] = {k: sum(d[k] for d in ds) for k, _ in SS_KEYS}
     res["sched"] = sched
     return res
 
@@ -421,6 +478,8 @@ def event_row(T, C, ev, elephants, src_of):
     for arm, R in (("T", T), ("C", C)):
         for k in ("events_W2", "rto_W2", "retrans_W2", "t_move_s", "flowmod_ms"):
             row["%s_%s" % (k, arm)] = R.get(k, np.nan)
+        for k, _ in SS_KEYS:                    # post hoc, the moved flows' sockets
+            row["ss_%s_W2_%s" % (k, arm)] = R.get("ss_W2", {}).get(k, np.nan)
     row["event_W2"] = int(row.get("events_W2_T", 0) >= 1)
     return row
 
@@ -456,8 +515,8 @@ def load_damage(damage, compare):
         expT = {f: sorted({pre[f], post[f]}) for f in elephants}
         expC = {f: [post[f]] for f in elephants}
         hosts = sorted({src_of[f] for f in rp["moved"]})
-        T = arm_measure(rdT, elephants, expT, hosts)
-        C = arm_measure(rdC, elephants, expC, hosts)
+        T = arm_measure(rdT, elephants, expT, hosts, rp["moved"])
+        C = arm_measure(rdC, elephants, expC, hosts, rp["moved"])
         probs = [a + ": " + R["path_check"] for a, R in (("T", T), ("C", C))
                  if R["path_check"] != "ok"]
         if probs:
@@ -555,6 +614,42 @@ def damage_tables(events, ctrls, runs, perrun, secs):
           "not exclude them. Events whose W%g runs past the end of the elephants (deficit over "
           "a shorter span): %d of %d." % (PRIMARY_W, int(events.w10_truncated.sum()),
                                            len(events))]
+    if "ss_reord_seen_W2_T" in events and events.ss_reord_seen_W2_T.notna().any():
+        L += ["", "Post hoc (added in the code review, before any result was read): the W2 "
+              "counters in the last column are the sender hosts' counters, which in ecmp_mixed "
+              "also count each host's mice (SYN-loss RTOs among them), so they are shown here "
+              "for both arms, next to the moved flows' own sockets (ss -tin, summed over the "
+              "event's moved flows, W2). Mean ± 95 % CI over events, move arm / no-move arm.",
+              "", "| controller | events | reorderings seen (reord_seen) | DSACKed duplicates "
+              "(dsack_dups) | retransmitted segments | events with a reordering seen | host "
+              "counters: events with a reorder event | host counters: events with an RTO |",
+              "|" + "---|" * 8]
+        for c in present:
+            e = events[events.controller == c]
+
+            def pair(k, f="%.2g"):
+                return "%s / %s" % (fmt_ci(e[k + "_T"], f), fmt_ci(e[k + "_C"], f))
+
+            def count(k):
+                return "%d / %d of %d" % (int((e[k + "_T"].fillna(0) > 0).sum()),
+                                          int((e[k + "_C"].fillna(0) > 0).sum()), len(e))
+            L.append("| %s | %d | %s | %s | %s | %s | %s | %s |" % (
+                CTRL_LABEL.get(c, c), len(e), pair("ss_reord_seen_W2"), pair("ss_dsack_dups_W2"),
+                pair("ss_retrans_W2"), count("ss_reord_seen_W2"), count("events_W2"),
+                count("rto_W2")))
+    L += ["", "Post hoc, descriptive (code review): when the events happened (seconds after "
+          "t0; the elephants start in the first 0.5 s, so an event before about 3 s has its "
+          "pre-move window in their slow start), and how often the first moved elephant was "
+          "alone on its uplink (feature elephants_on_p = 1: greedy gain > 0 then moves it only "
+          "because U_p - r_f, i.e. the mice on p plus the error of the 1 s rate estimate, "
+          "exceeds U_q):", ""]
+    for c in present:
+        e = events[events.controller == c]
+        t = e.t_event_s.astype(float)
+        L.append("- %s: event time median %.1f s (min %.1f, max %.1f), %d of %d before 3 s; "
+                 "first moved elephant alone on its uplink in %d of %d" % (
+                     CTRL_LABEL.get(c, c), t.median(), t.min(), t.max(), int((t < 3).sum()),
+                     len(e), int((e.feat_elephants_on_p == 1).sum()), len(e)))
     L += ["", "Damage per run: sum of term (3) at W%g over the run's events, MB. A run "
           "without a reroute of an elephant counts 0; a run with an event that has no "
           "analysed pair is left out (its sum would be incomplete). Benefit: the run's "

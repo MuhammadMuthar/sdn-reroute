@@ -868,3 +868,79 @@ The independent code review of the Chunk 4 controllers, runner and replay
 (part 1, next-session step 1) has not been done. Chunk 3 ran its review
 while the campaigns ran, before any result was read; the same works here.
 STATUS.md untouched (no results yet).
+
+## 2026-10-26 Chunk 4 (part 4, laptop): campaign, replays, analysis
+
+Remote Control session on the laptop, Opus 5.5. Boot
+be9af6df-f66d-41bc-acf6-c99ae6688363 (up since 2026-10-23 23:51 PKT), not
+the Chunk 3 boot, so ECMP's dp_hash puts a given seed's flows on other
+spines than in Chunk 3; every controller of this campaign shares the boot.
+
+### Setup
+- main was at e38c9b7 (PR #8, Chunks 5-6 prep), ahead of the part 3 patch's
+  base (5beb93a). `git am -3` of chunk4-analysis-prep.patch: one conflict in
+  LOG.md (both sides appended a section), resolved by keeping both, main's
+  first. 26 of 26 tests pass (the patch's 19, plus test_costaware 5 and
+  test_damage_model 2 from main).
+- controllers/hedera.py changed after the part 1 pilots (60f4263: the
+  decision moved into `_rule`, the feature record is built before it).
+  Checked by reading: same verdicts, and the record can be built for every
+  candidate (t_syn is always set, p and q are always spines 1-4). This
+  campaign is the first live run of that version.
+- Laptop on AC (sleep on AC is off in GNOME); each campaign ran under
+  `systemd-inhibit --what=idle:sleep`. Desktop apps open (Chrome, ChatGPT),
+  load average about 1 on 8 cores. All runs rootless (userns.sh).
+
+### Campaign (started 18:33 PKT; `scripts/chunk4_campaigns.sh`)
+`runner.py campaign --controllers ecmp,ecmp_mon,hedera,cooldown --scenario
+ecmp_mixed --runs 10 --seed 1 --out results/compare/compare-2026-10-26`,
+40 runs, about 68 s each (part 1 pilots: 89 s on the old boot).
+
+### Code review (controllers, runner, replay; before any campaign result was read)
+Read: controllers/fabric.py, ecmp.py, ecmp_mon.py, cooldown.py, hedera.py,
+experiments/runner.py, replay.py, moves.py, metrics.py, traffic.py,
+spinetrace.py, and analysis/chunk4.py against the part 2 plan. As a pipeline
+check, chunk4.py ran on the part 1 dev pilot (results/compare/dev-pilot1 and
+results/damage/dev-pilot1, uncommitted, one Hedera-style run, two events;
+not a result) with output in a scratch directory. No bug that changes a
+number. Findings:
+1. Fixed in the analysis, post hoc: the plan's "reorder / spurious events
+   and RTOs in W2 at the moved flows' senders" are the sender hosts' nstat
+   counters. In ecmp_mixed each of h1..h4 also sends about 10 mice/s, so
+   these count the mice too (SYN-loss RTOs among them); in Chunk 3 h1
+   carried only E0. In the dev pilot the no-move arm had an RTO in W2 in 2
+   of 2 events. analysis/chunk4.py keeps the plan's column and adds a post
+   hoc table: the no-move arm's host counters next to the move arm's, and
+   the moved flows' own sockets from the ss logs (retransmissions,
+   reord_seen, dsack_dups over W2; `ss_socket`, `ss_delta`, unit test
+   test_ss_socket_counts). On the dev pilot: reord_seen 8 / 0 and 1 / 0
+   (move / no-move arm), dsack_dups 20 / 0 and 2 / 0.
+2. Design property of the frozen Hedera-style baseline, no change: with
+   "gain > 0" a flow alone on its uplink moves whenever U_p - r_f > U_q,
+   i.e. when p's mice plus the error of the 1 s rate estimate (OVS refreshes
+   rule counters about every 0.5 s) exceed the load on q. The dev pilot's
+   first event is one (elephants_on_p = 1, gain 1.42 Mbit/s). The summary
+   now counts such events (post hoc, descriptive).
+3. Replay timing, no change: the runner reads the 8 hosts' counters
+   (snapshot m0_pre) after reaching the event time and before sending the
+   flow-mods, so a replayed move or sham goes out about 50-70 ms after the
+   live round's time, and the arms differ by about 20 ms (dev pilot: T 1.838
+   s, C 1.860 s, event at 1.788 s). Windows start at each arm's own barrier
+   reply, as planned, so this does not bias T against C.
+4. Design property, reported: the first Hedera-style rounds come about 1.8
+   s after t0, while the elephants are in slow start, so an early event's
+   pre-move window covers their start. The summary lists event times
+   (post hoc, descriptive).
+5. Checked, fine: replay.py builds T and C as the plan says (every elephant
+   pinned from the start, the same flow-mods at the same time, a sham
+   MODIFY_STRICT in C, ACKs and mice on ECMP in both arms, the plain ECMP
+   controller in both); events_of_run checks the controller's view against
+   the uplink captures; policy_moves drops failed and no-op flow-mods;
+   chunk4.py checks every elephant's captured spines in both arms and counts
+   runs without an elephant event as 0 damage.
+6. Caveat for S2: its reorder metric (snd_reorder_events, whole run, all
+   senders) also includes the mice. Pre-registered as is; reported with this
+   caveat.
+Edits to the runner, controllers or metrics: none (each run re-imports
+them). Only analysis/chunk4.py and tests/test_chunk4.py changed (one new
+test; 27 of 27 pass).

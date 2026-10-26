@@ -170,6 +170,31 @@ class TestUnits(unittest.TestCase):
         con, L = chunk4.contrasts_table(runs, chunk4.controllers_in(runs))
         self.assertFalse(con.reference.eq("ecmp_mon").any())
 
+    def test_ss_socket_counts(self):
+        """Per-socket W2 counters: only the given local port, missing fields are 0."""
+        log = ("T 100.00\n"
+               "ESTAB 0 0 10.0.0.1:40001 10.0.0.5:5201\n"
+               "\t skmem:(r0) cubic cwnd:20 ssthresh:17 retrans:0/3 dsack_dups:1\n"
+               "ESTAB 0 0 10.0.0.1:43000 10.0.0.5:5201\n"
+               "\t skmem:(r0) cubic cwnd:2 retrans:0/50 reord_seen:9\n"
+               "T 101.00\n"
+               "ESTAB 0 0 10.0.0.1:40001 10.0.0.5:5201\n"
+               "\t skmem:(r0) cubic cwnd:10 retrans:1/7 reord_seen:2 dsack_dups:4\n"
+               "T 103.50\n"
+               "ESTAB 0 0 10.0.0.1:40001 10.0.0.5:5201\n"
+               "\t skmem:(r0) cubic cwnd:12 retrans:0/9 reord_seen:5 dsack_dups:4\n")
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "ss_h1.log"), "w") as f:
+                f.write(log)
+            s = chunk4.ss_socket(d, "h1", 40001, 90.0)
+            self.assertEqual([t for t, _ in s], [10.0, 11.0, 13.5])
+            self.assertEqual(s[0][1], dict(retrans=3, reord_seen=0, dsack_dups=1))
+            self.assertEqual(chunk4.ss_delta(s, 10.5, 12.5),
+                             dict(retrans=4, reord_seen=2, dsack_dups=3))
+            self.assertEqual(chunk4.ss_delta(s, 5.0, 9.0),
+                             dict(retrans=0, reord_seen=0, dsack_dups=0))
+            self.assertEqual(chunk4.ss_socket(d, "h2", 40001, 90.0), [])
+
     def test_event_features_skip_a_mouse_moved_first(self):
         def rec(sport, dport, rate):
             return dict(flow=dict(src="10.0.0.1", dst="10.0.0.5", sport=sport, dport=dport),
