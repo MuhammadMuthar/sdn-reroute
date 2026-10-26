@@ -20,6 +20,7 @@ Outputs (in --out, default the compare directory)
   chunk4_events.csv     one row per replayed reroute event: the three damage
                         terms per window, counters, the controller's pre-move
                         features (Chunk 5 input)
+  chunk4_run_damage.csv damage per live run (run_damage), the per-run table
   figures/chunk4_comparison.png, chunk4_damage.png, chunk4_tradeoff.png
                         (--figures DIR; a SYNTHETIC campaign never writes there)
 
@@ -60,6 +61,7 @@ from scipy import stats  # noqa: E402
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO)
 from analysis.gate import EVENT, ack_at, mean_ci  # noqa: E402
+from experiments.moves import flow_key, policy_moves  # noqa: E402
 
 WINDOWS = (2.0, 5.0, 10.0)
 PRIMARY_W = 10.0
@@ -230,34 +232,59 @@ def paired(runs, c, ref, metric):
     return d, m, h
 
 
+def verdict(pred, m, h, n):
+    lo, hi = m - h, m + h
+    if np.isnan(m) or n < 2:
+        return "n/a"
+    if pred.startswith("> 0"):
+        return "supported" if lo > 0 else ("opposite sign" if hi < 0 else "not supported")
+    if pred.startswith("<= 0"):
+        return "supported" if hi <= 0 else ("opposite sign" if lo > 0 else "not supported")
+    if pred.startswith("CI includes 0"):
+        return "as predicted" if lo <= 0 <= hi else "monitoring changes the result"
+    return "reported"
+
+
 def contrasts_table(runs, ctrls):
     rows, L = [], []
-    L += ["| id | contrast | metric | n pairs | difference, mean [95 % CI] | prediction | outcome |",
-          "|---|---|---|---|---|---|---|"]
+    head = ["| id | contrast | metric | n pairs | difference, mean [95 % CI] | prediction | "
+            "outcome |", "|---|---|---|---|---|---|---|"]
     label = {k: lab for k, lab, _ in METRICS}
     seen = set()
-    for cid, c, ref, metric, pred in CONTRASTS:
-        if c not in ctrls or ref not in ctrls:
-            continue
+
+    def tested(cid, c, ref, metric, pred):
         d, m, h = paired(runs, c, ref, metric)
-        lo, hi = m - h, m + h
-        if np.isnan(m) or len(d) < 2:
-            out = "n/a"
-        elif pred.startswith("> 0"):
-            out = "supported" if lo > 0 else ("opposite sign" if hi < 0 else "not supported")
-        elif pred.startswith("<= 0"):
-            out = "supported" if hi <= 0 else ("opposite sign" if lo > 0 else "not supported")
-        elif pred.startswith("CI includes 0"):
-            out = "as predicted" if lo <= 0 <= hi else "monitoring changes the result"
-        else:
-            out = "reported"
+        out = verdict(pred, m, h, len(d))
         rows.append(dict(id=cid, controller=c, reference=ref, metric=metric, n_pairs=len(d),
-                         mean=m, ci95=h, lo=lo, hi=hi, prediction=pred, outcome=out,
+                         mean=m, ci95=h, lo=m - h, hi=m + h, prediction=pred, outcome=out,
                          preregistered=1))
         seen.add((c, ref, metric))
         L.append("| %s | %s minus %s | %s | %d | %s [%s, %s] | %s | %s |" % (
             cid, CTRL_LABEL.get(c, c), CTRL_LABEL.get(ref, ref), label.get(metric, metric),
-            len(d), fmt(m), fmt(lo), fmt(hi), pred, out))
+            len(d), fmt(m), fmt(m - h), fmt(m + h), pred, out))
+        return out
+
+    L += head
+    s1_failed = []
+    for cid, c, ref, metric, pred in CONTRASTS:
+        if c in ctrls and ref in ctrls:
+            if tested(cid, c, ref, metric, pred) == "monitoring changes the result":
+                s1_failed.append(label.get(metric, metric))
+    # plan, S1: "If not, the Hedera and cooldown contrasts are reported against
+    # monitor-only as well, since that is their true baseline."
+    if s1_failed:
+        L += ["", "S1 failed (%s), so the Hedera-style and cooldown-only contrasts are also "
+              "reported against monitor-only, as the plan says:" % "; ".join(s1_failed), ""]
+        L += head
+        for c in ("hedera", "cooldown"):
+            if c not in ctrls:
+                continue
+            for cid, c0, ref, metric, pred in CONTRASTS:
+                if c0 == "hedera" and ref == BASELINE:
+                    if c == "hedera":
+                        tested(cid + " vs monitor-only", c, "ecmp_mon", metric, pred)
+                    else:
+                        tested("", c, "ecmp_mon", metric, "none (reported)")
     L += ["", "Descriptive paired differences (not pre-registered as tests):", "",
           "| contrast | metric | n pairs | difference, mean [95 % CI] |", "|---|---|---|---|"]
     for c in ctrls:
@@ -297,8 +324,8 @@ def per_run_table(runs, ctrls):
 
 
 # ---------------------------------------------------------------- damage
-def policy_features(compare, live_run):
-    """{round: features of the round's first ok move} from policy_log.jsonl."""
+def policy_rounds(compare, live_run):
+    """{round: the round's ok moves, as feature records} from policy_log.jsonl."""
     if not compare:
         return {}
     recs = read_jsonl(os.path.join(compare, "runs", live_run, "policy_log.jsonl"))
@@ -308,11 +335,20 @@ def policy_features(compare, live_run):
             continue
         ok = [m for m in r.get("moves", []) if (m.get("reply") or {}).get("ok")]
         if ok:
-            f = {k: ok[0].get(k) for k in FEATURES}
-            f["n_moves_in_round"] = len(ok)
-            f["why"] = ok[0].get("why")
-            out[r["round"]] = f
+            out[r["round"]] = ok
     return out
+
+
+def event_features(moves, first):
+    """Features of an event's first move: the round's record of its first moved
+    elephant (`first` = its flow_key). A round can also move a short flow that
+    crossed the elephant threshold; that move is not part of the event (not
+    replayed) and can come first in the log."""
+    rec = [m for m in moves if flow_key(m["flow"]) == first]
+    f = {k: rec[0].get(k) for k in FEATURES} if rec else {}
+    f["n_moves_in_round"] = len(moves) if moves else np.nan
+    f["why"] = rec[0].get("why") if rec else None
+    return f
 
 
 def arm_measure(rd, elephants, expected, moved_src_hosts):
@@ -379,6 +415,9 @@ def event_row(T, C, ev, elephants, src_of):
     pre_C = sum(C["G"][f]["pre"] for f in elephants) * 8 / PRE_W / 1e6
     row.update(pre_goodput_T_mbps=pre_T, pre_goodput_C_mbps=pre_C,
                pre_mismatch_flag=int(abs(pre_T - pre_C) > 1.0))
+    for f in elephants:              # the plan reports every elephant's pre-move goodput
+        for arm, R in (("T", T), ("C", C)):
+            row["pre_%s_mbps_%s" % (arm, f)] = R["G"][f]["pre"] * 8 / PRE_W / 1e6
     for arm, R in (("T", T), ("C", C)):
         for k in ("events_W2", "rto_W2", "retrans_W2", "t_move_s", "flowmod_ms"):
             row["%s_%s" % (k, arm)] = R.get(k, np.nan)
@@ -428,16 +467,69 @@ def load_damage(damage, compare):
                    run_T=os.path.basename(rdT), run_C=os.path.basename(rdC),
                    t_event_s=rp.get("t_event"))
         row.update(event_row(T, C, ev, elephants, src_of))
+        # W10 runs past the end of an elephant (both arms end at the same schedule
+        # time, so the deficit is over a shorter span): reported, not excluded
+        end = min(e["start"] + e["duration"] for e in sT["elephants"])
+        row["w10_truncated"] = int(max(T["t_move_s"], C["t_move_s"]) + PRIMARY_W > end)
         if (ctrl, live) not in feats:
-            feats[(ctrl, live)] = policy_features(compare, live)
-        f = feats[(ctrl, live)].get(rnd, {})
+            feats[(ctrl, live)] = policy_rounds(compare, live)
+        first = {e["id"]: e for e in sT["elephants"]}[rp["moved"][0]]
+        f = event_features(feats[(ctrl, live)].get(rnd, []),
+                           flow_key(dict(src=first["src_ip"], dst=first["dst_ip"],
+                                         sport=first["sport"], dport=first["dport"])))
         for k in FEATURES + ["n_moves_in_round", "why"]:
             row["feat_" + k] = f.get(k, np.nan)
         rows.append(row)
     return pd.DataFrame(rows), excl
 
 
-def damage_tables(events, ctrls):
+def spec_notes(damage):
+    """What experiments/replay.py found and did not replay (its jobs.json)."""
+    p = os.path.join(damage, "jobs.json")
+    if not os.path.exists(p):
+        return []
+    s = json.load(open(p))
+    L = ["Events found by experiments/replay.py: %s; replayed: %d%s." % (
+        ", ".join("%s %d" % (CTRL_LABEL.get(c, c), n) for c, n in s["n_events"].items()),
+        s["n_events_replayed"], " (seeded sample, at most %d per controller)" %
+        s["max_events"] if s.get("max_events") else "")]
+    if s.get("skipped_moves"):
+        L.append("Moves of flows that are not elephants (in the live metrics, not "
+                 "replayed): %d." % len(s["skipped_moves"]))
+    if s.get("problems"):
+        L += ["Live runs not replayed (paths not trusted, or errors):"] + \
+             ["- " + x for x in s["problems"]]
+    return L + [""]
+
+
+def run_damage(events, runs, compare):
+    """Damage per live run: the sum of term (3) at the primary window over the
+    run's events, bytes. A run without a reroute of an elephant sums to 0; a run
+    with an event that has no analysed pair (excluded, or never replayed) is
+    left out (NaN), because its sum would be incomplete. Returns one row per
+    run of every controller that rerouted an elephant in any run."""
+    rows = []
+    done = {}
+    for _, e in events.iterrows():
+        done.setdefault(e.live_run, {})[e["round"]] = (e["dest_total_W%g" % PRIMARY_W],
+                                                        e["moved_W%g" % PRIMARY_W])
+    for _, r in runs.iterrows():
+        rd = os.path.join(compare, "runs", r.run_id)
+        meta = json.load(open(os.path.join(rd, "meta.json")))
+        sched = json.load(open(os.path.join(rd, "schedule.json")))
+        rounds = {m["round"] for m in policy_moves(meta, sched) if m["flow_id"]}
+        got = done.get(r.run_id, {})
+        miss = rounds - set(got)
+        rows.append(dict(controller=r.controller, live_run=r.run_id, seed=r.seed,
+                         n_events=len(rounds), n_missing=len(miss),
+                         dest_total=np.nan if miss else float(sum(got[k][0] for k in rounds)),
+                         moved=np.nan if miss else float(sum(got[k][1] for k in rounds))))
+    d = pd.DataFrame(rows)
+    rerouting = set(d[d.n_events > 0].controller)
+    return d[d.controller.isin(rerouting)]
+
+
+def damage_tables(events, ctrls, runs, perrun, secs):
     L = []
     present = [c for c in ctrls if c in set(events.controller)] + \
               sorted(set(events.controller) - set(ctrls))
@@ -445,7 +537,7 @@ def damage_tables(events, ctrls):
           "(positive = the reroute cost that goodput). Mean ± 95 % CI over events.", "",
           "| controller | events | pairs flagged (pre-move arms differ > 1 Mbit/s) | "
           "window | (1) moved flow | (2) bystanders | (3) destination-path total = (1)+(2) "
-          "| all four elephants | reorder event in W2 (move arm) |",
+          "| all four elephants | reorder event / RTO in W2 (move arm) |",
           "|" + "---|" * 9]
     for c in present:
         e = events[events.controller == c]
@@ -454,21 +546,32 @@ def damage_tables(events, ctrls):
                 CTRL_LABEL.get(c, c), len(e), int(e.pre_mismatch_flag.sum()), w,
                 fmt_ci(e["moved_mbps_W%g" % w]), fmt_ci(e["bystanders_mbps_W%g" % w]),
                 fmt_ci(e["dest_total_mbps_W%g" % w]), fmt_ci(e["all_total_mbps_W%g" % w]),
-                "%d / %d" % (int(e.event_W2.sum()), len(e)) if w == PRIMARY_W else ""))
-    L += ["", "Damage per run: sum of term (3) at W%g over the run's replayed events, "
-          "MB (0 for a run without a reroute of an elephant is *not* assumed; only "
-          "runs with at least one replayed event appear).  " % PRIMARY_W, "",
-          "| controller | runs with events | events per run | term (3) per run, MB | "
-          "moved-flow term per run, MB |", "|---|---|---|---|---|"]
-    for c in present:
-        e = events[events.controller == c]
-        per = e.groupby("live_run").agg(n=("round", "size"),
-                                        d=("dest_total_W%g" % PRIMARY_W, "sum"),
-                                        m=("moved_W%g" % PRIMARY_W, "sum"))
-        L.append("| %s | %d | %s | %s | %s |" % (CTRL_LABEL.get(c, c), len(per),
-                                                 fmt_ci(per.n, "%.1f"),
-                                                 fmt_ci(per.d / 1e6, "%.2f"),
-                                                 fmt_ci(per.m / 1e6, "%.2f")))
+                "%d / %d events, %d / %d" % (int(e.event_W2.sum()), len(e),
+                                             int((e.rto_W2_T.fillna(0) > 0).sum()), len(e))
+                if w == PRIMARY_W else ""))
+    L += ["", "The move arm starts from the pre-move placement and the no-move arm from the "
+          "post-move one, so the elephants' pre-move goodput differs by construction whenever "
+          "the move changes how elephants share uplinks; the flag marks those pairs, it does "
+          "not exclude them. Events whose W%g runs past the end of the elephants (deficit over "
+          "a shorter span): %d of %d." % (PRIMARY_W, int(events.w10_truncated.sum()),
+                                           len(events))]
+    L += ["", "Damage per run: sum of term (3) at W%g over the run's events, MB. A run "
+          "without a reroute of an elephant counts 0; a run with an event that has no "
+          "analysed pair is left out (its sum would be incomplete). Benefit: the run's "
+          "elephant goodput gain over ECMP on the same seed (P1, mean of 4, Mbit/s) and the "
+          "same as bytes over the run (sum of the 4 elephants x run length, MB)." % PRIMARY_W,
+          "", "| controller | runs (with events / left out) | events per run | term (3) per "
+          "run, MB | moved-flow term per run, MB | benefit over ECMP, Mbit/s | benefit over "
+          "ECMP per run, MB |", "|---|---|---|---|---|---|---|"]
+    for c in [c for c in ctrls if c in set(perrun.controller)]:
+        p = perrun[perrun.controller == c]
+        _, bm, bh = paired(runs, c, BASELINE, "eleph_goodput_mean")
+        d, _, _ = paired(runs, c, BASELINE, "eleph_goodput_sum")
+        L.append("| %s | %d (%d / %d) | %s | %s | %s | %s [%s, %s] | %s |" % (
+            CTRL_LABEL.get(c, c), len(p), int((p.n_events > 0).sum()),
+            int(p.dest_total.isna().sum()), fmt_ci(p.n_events, "%.1f"),
+            fmt_ci(p.dest_total / 1e6, "%.2f"), fmt_ci(p.moved / 1e6, "%.2f"), fmt(bm),
+            fmt(bm - bh), fmt(bm + bh), fmt_ci(d * secs / 8, "%.2f")))
     L += ["", "Reported, not tested (W%g, term (3) in Mbit/s against the controller's "
           "pre-move features; Pearson r over events, all controllers pooled):" % PRIMARY_W, ""]
     y = events["dest_total_mbps_W%g" % PRIMARY_W]
@@ -582,8 +685,8 @@ def fig_damage(events, ctrls, path):
     plt.close(fig)
 
 
-def fig_tradeoff(runs, events, ctrls, path):
-    """Benefit over ECMP (paired per seed) against what it cost."""
+def fig_tradeoff(runs, perrun, ctrls, path):
+    """Benefit over ECMP (paired per seed) against what it cost (run_damage)."""
     fig, axes = plt.subplots(1, 2, figsize=(9, 4))
     xs = [("reroutes_per_min", "reroutes per minute (mean ± 95 % CI)")]
     for ax, (xk, xlab) in zip(axes[:1], xs):
@@ -608,14 +711,12 @@ def fig_tradeoff(runs, events, ctrls, path):
         ax.set_title("Benefit against how often it moved flows", fontsize=9, color=INK)
     ax = axes[1]
     style(ax)
-    if events is not None and len(events):
+    if perrun is not None and len(perrun):
         for c in ctrls:
-            if c == BASELINE or c not in set(events.controller):
+            if c == BASELINE or c not in set(perrun.controller):
                 continue
             d, m, h = paired(runs, c, BASELINE, "eleph_goodput_mean")
-            per = events[events.controller == c].groupby("live_run")[
-                "dest_total_W%g" % PRIMARY_W].sum() / 1e6
-            xm, xh = mean_ci(per)
+            xm, xh = mean_ci(perrun[perrun.controller == c].dest_total / 1e6)
             if np.isnan(m) or np.isnan(xm):
                 continue
             ax.errorbar([xm], [m], xerr=[0 if np.isnan(xh) else xh],
@@ -730,17 +831,23 @@ def main():
     L += T2
     con.to_csv(os.path.join(out, "chunk4_contrasts.csv"), index=False, float_format="%.6g")
 
-    events = None
+    events, perrun = None, None
     if a.damage:
         events, dex = load_damage(a.damage, a.compare)
         L += ["", "## Per-reroute damage (matched move / no-move replays, %s)" %
               os.path.basename(os.path.abspath(a.damage)), ""]
+        L += spec_notes(a.damage)
         if dex:
             L += ["Pairs excluded (missing arm, error, or captures not on the intended "
                   "spines):"] + ["- " + x for x in dex] + [""]
         if len(events):
-            L += damage_tables(events, ctrls)
+            perrun = run_damage(events, runs, a.compare)
+            secs = json.load(open(os.path.join(a.compare, "runs", runs.run_id.iloc[0],
+                                               "schedule.json")))["duration"]
+            L += damage_tables(events, ctrls, runs, perrun, secs)
             events.to_csv(os.path.join(out, "chunk4_events.csv"), index=False,
+                          float_format="%.6g")
+            perrun.to_csv(os.path.join(out, "chunk4_run_damage.csv"), index=False,
                           float_format="%.6g")
         else:
             L += ["No analysable pair.", ""]
@@ -755,9 +862,10 @@ def main():
         fig_damage(events, ctrls, p)
         figs.append(p)
     p = os.path.join(figdir, "chunk4_tradeoff.png")
-    fig_tradeoff(runs, events, ctrls, p)
+    fig_tradeoff(runs, perrun, ctrls, p)
     figs.append(p)
-    L += ["", "Figures: " + ", ".join(os.path.relpath(f, REPO) for f in figs), ""]
+    L += ["", "Figures: " + ", ".join(os.path.relpath(f, REPO) if os.path.splitdrive(f)[0] ==
+                                      os.path.splitdrive(REPO)[0] else f for f in figs), ""]
     open(os.path.join(out, "chunk4_summary.md"), "w").write("\n".join(L))
     print("\n".join(L[:len(T1) + 12]))
     print("...\nwrote %s and %s" % (os.path.join(out, "chunk4_summary.md"), ", ".join(figs)))

@@ -23,7 +23,7 @@ Neither arm has any other move, so each event is measured from the same state
 in both arms and apart from the controller's other rounds. ACKs and mice
 follow ECMP in both arms, as in the live run. Every elephant is tagged (host
 captures on both NICs) and counters are snapshotted around the move, as in
-the Chunk 3 loaded-move runs. analysis/stage2.py turns the pairs into the
+the Chunk 3 loaded-move runs. analysis/chunk4.py turns the pairs into the
 three damage terms. Moves of flows that are not iperf3 elephants (mice that
 crossed the elephant threshold) are counted in the live metrics but not
 replayed; the spec lists them.

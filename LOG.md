@@ -773,3 +773,98 @@ only, no experiments; Chunk 4 is running on the laptop and was not touched.
 - analysis/chunk4.py: labels for the two new controllers (no change to the
   pre-registered contrasts).
 - docs/stage2_report.md: skeleton per handout Stage 2 list.
+
+## 2026-10-26 Chunk 4 (part 3, desktop, no Mininet): fixture and analysis fixes
+
+Remote Control session that opened on a Windows desktop (DESKTOP-P0BJCR1)
+instead of the laptop, so no Mininet: only the analysis prep part 2 left
+undone. Fresh clone of main at 5beb93a; Python 3.14.7 venv with the pinned
+analysis packages (numpy 2.5.4, pandas 3.0.6, scipy 1.18.1, matplotlib
+3.11.2). No Chunk 4 campaign or replay data existed when any of this was
+written (10:00-10:50 UTC); nothing below is a result.
+
+### Built
+- `analysis/chunk4_fixture.py --out DIR [--seeds 5] [--mice-step 1]`: a
+  SYNTHETIC four-controller campaign in the runner's layout. Live runs use
+  the real ecmp_mixed schedules and go through experiments/metrics.py; the
+  replay jobs come from experiments/replay.py itself, then one synthetic run
+  per job. Planted: a round whose first logged move is a mouse that crossed
+  the elephant threshold, two elephants moved in one round, moves onto an
+  occupied uplink (bystanders), a flow moved in two consecutive rounds, two
+  flaps, a seed without a reroute, and three broken pairs (an arm with a
+  recorded error, an arm whose captures show the moved flow on its old
+  spine, a missing arm). DIR/planted.json holds every value the analysis
+  must recover.
+- `tests/test_chunk4.py` (10 tests, about a minute): every planted damage
+  term at W2/W5/W10, pre-move goodput, the exclusions and their reasons, the
+  features, damage per run, the live reroute columns of runs.csv (reroutes,
+  mice moves, flaps, rounds, reorder events, retransmissions), P1, and the
+  S1 branch both ways.
+
+### Fixes to analysis/chunk4.py (each checked against the part 2 plan)
+1. Bug: an event's features came from the round's first logged move. A round
+   can also move a mouse that crossed 1 Mbit/s, which the event does not
+   include (replay.py skips it) and which can come first (candidates are
+   sorted by path load). The fixture's hedera-r02 round 3 got the mouse's
+   rate, 1.4 instead of 2.9 Mbit/s. Now the features are those of the
+   event's first moved elephant, as the plan says ("its first move");
+   feat_n_moves_in_round still counts every move of the round.
+2. Damage per run left out runs without an elephant reroute instead of
+   counting 0. The plan says "per run, the sum of term (3) over the run's
+   events", which is 0 for such a run, and P1, the benefit it is set
+   against, uses every seed; leaving them out inflates the damage of the
+   controller that reroutes less often. Now such runs count 0, and a run
+   with an event that has no analysed pair is left out and counted (its sum
+   would be incomplete). The tradeoff figure uses the same numbers; new
+   output chunk4_run_damage.csv.
+3. Not implemented before: the plan's S1 branch ("If not, the Hedera and
+   cooldown contrasts are reported against monitor-only as well"). When an
+   S1 contrast fails, P1 and P2 are repeated against monitor-only
+   (Hedera-style with the same predictions, labelled "P1 vs monitor-only";
+   cooldown-only reported).
+4. Plan items missing from the tables, now there: benefit next to damage in
+   the per-run table ("so the benefit in P1 and the damage it cost sit in
+   the same table": P1 in Mbit/s and as MB over the run, and the moved-flow
+   term per run); RTOs in W2 at the moved flows' senders next to the reorder
+   events; every elephant's pre-move goodput in both arms (events CSV,
+   pre_T_mbps_<E> / pre_C_mbps_<E>).
+5. Reporting only: the summary lists what replay.py did not replay (the
+   problems in its jobs.json and the count of non-elephant moves), counts
+   events whose W10 runs past the end of the elephants (w10_truncated), and
+   says the pre-move flag fires by construction (T starts from the pre-move
+   placement, C from the post-move one): it marks pairs, it excludes none.
+6. The "Figures:" line no longer fails when the output is on another drive
+   (Windows only).
+No pre-registered contrast, prediction, window or exclusion rule changed.
+experiments/replay.py: the docstring pointed at analysis/stage2.py, now
+analysis/chunk4.py (no code change).
+
+### Checks, rerun after the fixes
+- `--loaded-check results/loaded/loaded-2026-10-19`: W10 moved -0.884 ±
+  0.359, bystanders +0.858 ± 0.354, destination-path total -0.0254 ± 0.010
+  Mbit/s, reorder event 9/10: unchanged, the Chunk 3 numbers.
+- `--compare results/ecmp/ecmp-2026-10-19`: 6.16 ± 0.93 / 4.23 ± 1.16
+  Mbit/s, unchanged.
+- Fixture with 5 seeds and every mouse: 20 live runs, 11 events (3 broken);
+  every planted term comes back to 1e-4 Mbit/s and the broken pairs are
+  excluded with the right reason. All 19 tests pass
+  (`.venv/bin/python -m unittest discover -s tests -t .`).
+
+### Open point for the write-up
+The pre-move flag (sum over elephants, arms differ by > 1 Mbit/s) cannot
+tell a replay that went wrong from the intended difference between the arms.
+A check that can: elephants that are neither moved nor on a source or
+destination spine of the event should have the same pre-move goodput in
+both arms. Not added (not in the plan); the per-elephant columns make it a
+one-liner.
+
+### Next session (laptop, in order)
+1. `git pull`; if this part is not on main yet, `git am` the patch from the
+   project library (chunk4-analysis-prep.patch). Then the 19 tests.
+2. `python3 experiments/runner.py campaign --controllers ecmp,ecmp_mon,hedera,cooldown --scenario ecmp_mixed --runs 10 --seed 1 --out results/compare/compare-<date>` (40 runs, about 1 h at 89 s per run).
+3. `python3 experiments/replay.py --live results/compare/compare-<date> --out results/damage/damage-<date>/jobs.json`, then `python3 experiments/runner.py replay --spec results/damage/damage-<date>/jobs.json --out results/damage/damage-<date>` (two runs per event; one pilot each gave 2 events for a Hedera-style run and 1 for a cooldown-only run, so roughly 60 runs, 1.5 h).
+4. `.venv/bin/python analysis/chunk4.py --compare results/compare/compare-<date> --damage results/damage/damage-<date>`, independent recomputation, STATUS.md.
+The independent code review of the Chunk 4 controllers, runner and replay
+(part 1, next-session step 1) has not been done. Chunk 3 ran its review
+while the campaigns ran, before any result was read; the same works here.
+STATUS.md untouched (no results yet).
