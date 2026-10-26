@@ -741,3 +741,35 @@ Hedera / cooldown columns and the replay pairs) was not written, so the
 multi-controller and `--damage` code paths have only run on the Chunk 3
 data through the shared functions; the first real campaign is their test.
 STATUS.md untouched (no results yet).
+
+## 2026-10-26: Chunks 5-6 code prep (cloud, no Mininet)
+
+Continues the cloud prep thread that stopped on credits after PR #7. Code
+only, no experiments; Chunk 4 is running on the laptop and was not touched.
+
+- `analysis/damage_model.py` (Chunk 6 training). Decisions, fixed before any
+  real data: target dest_total_deficit_W10 (matches cost.HORIZON_S = 10 s);
+  inputs are cost.FEATURES built through cost.vector, so training and the
+  controller see identical vectors (non-finite -> 1e9, as ModelCost); split
+  leave-one-group-out by seed (GroupKFold(10) above 10 groups; `--group` for
+  held-out scenarios); hyperparameters fixed in the file (tree depth 4 / leaf
+  5; GBR 200 trees, depth 3, lr 0.05, subsample 0.8), no tuning on test folds;
+  the ML controller uses GBR, chosen in advance. Added metric: decision
+  agreement (rule verdict with C_hat vs with the measured damage), because
+  MAE alone does not say whether the controller decides right.
+- Synthetic check (`--synthetic 300`, scratch only, not a result): every
+  learned estimator beats predict-the-mean on held-out groups; formula fits
+  best because the generator has the formula's structure (expected, says
+  nothing about real data). Decision time on the cloud box: formula ~0.002 ms,
+  GBR ~0.23 ms median per flow, far below the 1 s poll.
+- `controllers/hedera.py`: decision moved into `_rule(feat)`; the feature
+  record is now built before the decision instead of after. Greedy and
+  cooldown verdicts are the same code; tests/test_costaware.py pins them.
+  Side effect: none on the log (the record of a move is identical).
+- `controllers/costaware.py` + variants: no silent fallback to C_hat = 0 if a
+  model file is missing (it raises). Moves the greedy rule would make but the
+  cost rule rejects are logged as kind "held" (ignored by existing readers,
+  which filter kind "round").
+- analysis/chunk4.py: labels for the two new controllers (no change to the
+  pre-registered contrasts).
+- docs/stage2_report.md: skeleton per handout Stage 2 list.

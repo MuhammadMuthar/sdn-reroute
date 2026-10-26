@@ -65,9 +65,10 @@ WINDOWS = (2.0, 5.0, 10.0)
 PRIMARY_W = 10.0
 PRE_W = 2.0
 BASELINE = "ecmp"
-CTRL_ORDER = ["ecmp", "ecmp_mon", "hedera", "cooldown"]
+CTRL_ORDER = ["ecmp", "ecmp_mon", "hedera", "cooldown", "costaware_formula", "costaware_ml"]
 CTRL_LABEL = {"ecmp": "ECMP", "ecmp_mon": "ECMP, monitor only",
-              "hedera": "Hedera-style", "cooldown": "cooldown-only"}
+              "hedera": "Hedera-style", "cooldown": "cooldown-only",
+              "costaware_formula": "cost-aware, formula", "costaware_ml": "cost-aware, ML"}
 # the repo's figure palette (analysis/ecmp.py, loaded_move.py): the static
 # baselines stay grey, the two rerouting controllers get the two hues
 CTRL_COLOR = {"ecmp": "#8a8a85", "ecmp_mon": "#b4b2a9", "hedera": "#e08a2c",
