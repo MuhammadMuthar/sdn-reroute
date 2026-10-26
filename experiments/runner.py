@@ -100,6 +100,16 @@ def inject(ifname):
         s.send(udp9_frame())
 
 
+def ovs_stats(rd, tag):
+    """Open vSwitch's own counters (datapath lookups hit / missed / lost, upcall
+    and revalidator coverage counters), for the monitoring-artifact check."""
+    with open(os.path.join(rd, "ovs_counters_%s.txt" % tag), "w") as f:
+        for cmd in (["ovs-appctl", "dpctl/show"], ["ovs-appctl", "upcall/show"],
+                    ["ovs-appctl", "coverage/show"]):
+            r = subprocess.run(cmd, capture_output=True, text=True)
+            f.write("== %s\n%s%s" % (" ".join(cmd), r.stdout, r.stderr))
+
+
 def run(a):
     import faulthandler
     from mininet.log import setLogLevel
@@ -147,6 +157,8 @@ def run(a):
             raise RuntimeError("switches not configured: %s" % st)
         meta["controller_app"] = st.get("app")
         step("switches configured")
+        if a.ovs_stats:
+            ovs_stats(rd, "start")
         H = {name: net.get(name) for name in sched["hosts"]}
         left = sorted(n for n in H if int(n[1:]) <= hpl)
         right = sorted(n for n in H if int(n[1:]) > hpl)
@@ -259,7 +271,10 @@ def run(a):
             clients.append(H[e["src"]].popen(
                 ["iperf3", "-c", e["dst_ip"], "-p", str(e["dport"]), "-t", str(e["duration"]),
                  "--cport", str(e["sport"]), "-J", "-i", "0.1"] +
-                (["-b", str(e["bitrate"])] if e.get("bitrate") else []),   # e.g. "3M" (Chunk 5)
+                (["-b", str(e["bitrate"])] if e.get("bitrate") else []) +   # e.g. "3M" (Chunk 5)
+                # kernel socket pacing (SO_MAX_PACING_RATE): a true cap; -b is an average
+                # since the start, so a flow held below it catches up later at full rate
+                (["--fq-rate", str(e["pacing"])] if e.get("pacing") else []),
                 stdout=open(os.path.join(rd, "iperf_client_%s.json" % e["id"]), "w"),
                 stderr=subprocess.STDOUT))
         step("elephants started")
@@ -302,6 +317,8 @@ def run(a):
                 meta["errors"].append("iperf3 server did not exit")
         snap("end")
         step("clients done")
+        if a.ovs_stats:
+            ovs_stats(rd, "end")
         meta["t_clients_end"] = time.time()
 
         # ---- stop the captures ----------------------------------------------
@@ -463,7 +480,7 @@ def execute(a, plan, jobs, schedule_sha256):
         json.dump(sched, open(os.path.join(rd, "schedule.json"), "w"), indent=1)
         cmd = [sys.executable, os.path.abspath(__file__), "run", "--run-dir", rd,
                "--controller", j["controller"], "--queue", str(a.queue), "--mbps", str(a.mbps),
-               "--host-qdisc", a.host_qdisc]
+               "--host-qdisc", a.host_qdisc] + (["--ovs-stats"] if a.ovs_stats else [])
         if root:
             subprocess.run(["mn", "-c"], capture_output=True)
         else:
@@ -505,6 +522,9 @@ def main():
                        help="controllers/<name>.py, a FabricController app")
         p.add_argument("--queue", type=int, default=20, help="pfifo packets per port")
         p.add_argument("--mbps", type=float, default=10.0)
+        p.add_argument("--ovs-stats", action="store_true",
+                       help="record ovs-appctl dpctl/show, upcall/show, coverage/show at the "
+                       "start and end of every run (Chunk 5 check of the monitoring artifact)")
         p.add_argument("--host-qdisc", choices=["netem", "default"], default="netem",
                        help="host NIC qdisc; netem (10 us) frees each skb when it leaves "
                        "the host, see topologies/leafspine.py")

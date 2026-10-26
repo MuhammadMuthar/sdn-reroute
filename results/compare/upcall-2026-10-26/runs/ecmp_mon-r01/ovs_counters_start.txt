@@ -1,0 +1,97 @@
+== ovs-appctl dpctl/show
+system@ovs-system:
+  lookups: hit:52 missed:72 lost:0
+  flows: 72
+  masks: hit:123 total:1 hit/pkt:0.99
+  cache: hit:11 hit-rate:8.87%
+  caches:
+    masks-cache: size:256
+  port 0: ovs-system (internal)
+  port 1: l1-s2
+  port 2: l1-h4
+  port 3: l1-h3
+  port 4: l1-s1
+  port 5: l1-h1
+  port 6: l1-h2
+  port 7: l1-s3
+  port 8: l1-s4
+  port 9: l1 (internal)
+  port 10: l2-s1
+  port 11: l2-h6
+  port 12: l2-h5
+  port 13: l2-s2
+  port 14: l2-s4
+  port 15: l2-h7
+  port 16: l2-s3
+  port 17: l2-h8
+  port 18: l2 (internal)
+  port 19: s1-l1
+  port 20: s1-l2
+  port 21: s1 (internal)
+  port 22: s2-l1
+  port 23: s2-l2
+  port 24: s2 (internal)
+  port 25: s3-l1
+  port 26: s3-l2
+  port 27: s3 (internal)
+  port 28: s4-l2
+  port 29: s4-l1
+  port 30: s4 (internal)
+== ovs-appctl upcall/show
+system@ovs-system:
+  flows         : (current 72) (avg 71) (max 72) (limit 20000)
+  dump duration : 1ms
+  ufid enabled : true
+
+  9: (keys 17)
+  10: (keys 28)
+  11: (keys 27)
+== ovs-appctl coverage/show
+Event coverage, avg rate over last: 5 seconds, last minute, last hour,  hash=c37e89ea:
+nln_changed               45.2/sec     3.767/sec        0.0628/sec   total: 226
+route_table_dump          20.2/sec     1.683/sec        0.0281/sec   total: 101
+netlink_sent             1593.0/sec   132.750/sec        2.2125/sec   total: 8057
+netlink_recv_jumbo        18.6/sec     1.550/sec        0.0258/sec   total: 133
+netlink_received         1776.6/sec   148.050/sec        2.4675/sec   total: 8977
+netdev_set_ethtool         4.8/sec     0.400/sec        0.0067/sec   total: 24
+netdev_get_ethtool        19.2/sec     1.600/sec        0.0267/sec   total: 96
+netdev_set_hwaddr          1.2/sec     0.100/sec        0.0017/sec   total: 6
+netdev_set_policing       12.0/sec     1.000/sec        0.0167/sec   total: 60
+vconn_sent                 9.8/sec     0.817/sec        0.0136/sec   total: 57
+vconn_received            20.0/sec     1.667/sec        0.0278/sec   total: 108
+vconn_open                 1.2/sec     0.100/sec        0.0017/sec   total: 6
+util_xalloc              24738.6/sec  2061.550/sec       34.3592/sec   total: 129637
+stream_open                1.4/sec     0.117/sec        0.0019/sec   total: 7
+pstream_open               2.6/sec     0.217/sec        0.0036/sec   total: 13
+seq_change               4159.0/sec   346.583/sec        5.7764/sec   total: 21912
+rconn_sent                 8.6/sec     0.717/sec        0.0119/sec   total: 51
+rconn_queued               8.6/sec     0.717/sec        0.0119/sec   total: 51
+poll_zero_timeout         22.0/sec     1.833/sec        0.0306/sec   total: 110
+poll_create_node         1870.6/sec   155.883/sec        2.5981/sec   total: 9750
+txn_success                1.8/sec     0.150/sec        0.0025/sec   total: 10
+txn_incomplete             3.6/sec     0.300/sec        0.0050/sec   total: 19
+txn_unchanged             39.6/sec     3.300/sec        0.0550/sec   total: 198
+netdev_get_stats          16.8/sec     1.400/sec        0.0233/sec   total: 132
+hmap_expand              928.0/sec    77.333/sec        1.2889/sec   total: 4790
+hmap_pathological         10.0/sec     0.833/sec        0.0139/sec   total: 50
+miniflow_malloc          855.6/sec    71.300/sec        1.1883/sec   total: 4290
+flow_extract               4.2/sec     0.350/sec        0.0058/sec   total: 21
+dpif_port_add              6.0/sec     0.500/sec        0.0083/sec   total: 30
+dpif_flow_put              8.8/sec     0.733/sec        0.0122/sec   total: 44
+dpif_flow_get              5.4/sec     0.450/sec        0.0075/sec   total: 27
+dpif_flow_flush            0.2/sec     0.017/sec        0.0003/sec   total: 1
+dpif_flow_del              5.4/sec     0.450/sec        0.0075/sec   total: 27
+dpif_execute_error         0.2/sec     0.017/sec        0.0003/sec   total: 1
+dpif_execute               4.6/sec     0.383/sec        0.0064/sec   total: 23
+cmap_shrink              101.8/sec     8.483/sec        0.1414/sec   total: 509
+cmap_expand              117.0/sec     9.750/sec        0.1625/sec   total: 585
+xlate_actions             12.6/sec     1.050/sec        0.0175/sec   total: 65
+upcall_flow_limit_grew     1.4/sec     0.117/sec        0.0019/sec   total: 9
+rev_flow_table             3.6/sec     0.300/sec        0.0050/sec   total: 18
+rev_port_toggled           1.2/sec     0.100/sec        0.0017/sec   total: 6
+rev_reconfigure            0.8/sec     0.067/sec        0.0011/sec   total: 4
+ofproto_update_port       16.8/sec     1.400/sec        0.0233/sec   total: 84
+ofproto_recv_openflow     18.8/sec     1.567/sec        0.0261/sec   total: 102
+ofproto_flush              1.2/sec     0.100/sec        0.0017/sec   total: 6
+bridge_reconfigure        17.6/sec     1.467/sec        0.0244/sec   total: 88
+140 events never hit

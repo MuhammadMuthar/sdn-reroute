@@ -1,0 +1,312 @@
+== l1 dump-group-stats
+OFPST_GROUP reply (OF1.3) (xid=0x6):
+ group_id=1,duration=42.398s,ref_count=5,packet_count=9089,byte_count=7861640,bucket0:packet_count=1949,byte_count=1562848,bucket1:packet_count=2408,byte_count=2340128,bucket2:packet_count=2538,byte_count=2159033,bucket3:packet_count=2194,byte_count=1799631
+== l1 dump-flows
+ cookie=0x0, duration=36.317s, table=0, n_packets=9309, n_bytes=14087343, priority=200,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.6,tp_src=40415,tp_dst=5202 actions=output:"l1-s3"
+ cookie=0x0, duration=36.315s, table=0, n_packets=12553, n_bytes=19000943, priority=200,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.7,tp_src=40331,tp_dst=5203 actions=output:"l1-s3"
+ cookie=0x0, duration=36.314s, table=0, n_packets=20818, n_bytes=31512705, priority=200,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.8,tp_src=40608,tp_dst=5204 actions=output:"l1-s1"
+ cookie=0x0, duration=36.320s, table=0, n_packets=13998, n_bytes=21187225, priority=200,tcp,nw_src=10.0.0.1,nw_dst=10.0.0.5,tp_src=40904,tp_dst=5201 actions=output:"l1-s4"
+ cookie=0x0, duration=42.431s, table=0, n_packets=7119, n_bytes=470898, priority=100,dl_dst=00:00:00:00:00:01 actions=output:"l1-h1"
+ cookie=0x0, duration=42.431s, table=0, n_packets=7987, n_bytes=556825, priority=100,dl_dst=00:00:00:00:00:02 actions=output:"l1-h2"
+ cookie=0x0, duration=42.431s, table=0, n_packets=10141, n_bytes=701801, priority=100,dl_dst=00:00:00:00:00:03 actions=output:"l1-h3"
+ cookie=0x0, duration=42.431s, table=0, n_packets=14699, n_bytes=1008159, priority=100,dl_dst=00:00:00:00:00:04 actions=output:"l1-h4"
+ cookie=0x0, duration=42.431s, table=0, n_packets=47, n_bytes=26871, priority=10,dl_dst=00:00:00:00:00:05 actions=group:1
+ cookie=0x0, duration=42.431s, table=0, n_packets=52, n_bytes=33166, priority=10,dl_dst=00:00:00:00:00:06 actions=group:1
+ cookie=0x0, duration=42.431s, table=0, n_packets=45, n_bytes=30285, priority=10,dl_dst=00:00:00:00:00:07 actions=group:1
+ cookie=0x0, duration=42.431s, table=0, n_packets=22, n_bytes=6898, priority=10,dl_dst=00:00:00:00:00:08 actions=group:1
+ cookie=0x0, duration=42.431s, table=0, n_packets=713, n_bytes=52762, priority=20,tcp,tcp_flags=+syn-ack actions=CONTROLLER:128,group:1
+== l1 dump-ports
+OFPST_PORT reply (OF1.3) (xid=0x2): 9 ports
+  port LOCAL: rx pkts=0, bytes=0, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=0, bytes=0, drop=0, errs=0, coll=0
+           duration=42.469s
+  port  "l1-h4": rx pkts=23677, bytes=33926480, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=14709, bytes=1008975, drop=0, errs=0, coll=0
+           duration=42.470s
+  port  "l1-h1": rx pkts=14033, bytes=21190197, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=7128, bytes=471624, drop=0, errs=0, coll=0
+           duration=42.470s
+  port  "l1-h3": rx pkts=15989, bytes=22140771, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=10151, bytes=702617, drop=0, errs=0, coll=0
+           duration=42.470s
+  port  "l1-s1": rx pkts=21604, bytes=1480044, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=22507, bytes=32719327, drop=0, errs=0, coll=0
+           duration=42.470s
+  port  "l1-h2": rx pkts=12105, bytes=16395534, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=7997, bytes=557641, drop=0, errs=0, coll=0
+           duration=42.470s
+  port  "l1-s4": rx pkts=8893, bytes=595737, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=16189, bytes=22964876, drop=0, errs=0, coll=0
+           duration=42.470s
+  port  "l1-s2": rx pkts=1835, bytes=130719, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=2419, bytes=2336522, drop=0, errs=0, coll=0
+           duration=42.470s
+  port  "l1-s3": rx pkts=7650, bytes=534087, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=23567, bytes=34151507, drop=0, errs=0, coll=0
+           duration=42.470s
+== l2 dump-group-stats
+OFPST_GROUP reply (OF1.3) (xid=0x6):
+ group_id=1,duration=42.512s,ref_count=5,packet_count=39946,byte_count=2737683,bucket0:packet_count=21595,byte_count=1479318,bucket1:packet_count=1826,byte_count=129993,bucket2:packet_count=7641,byte_count=533361,bucket3:packet_count=8884,byte_count=595011
+== l2 dump-flows
+ cookie=0x0, duration=42.536s, table=0, n_packets=7119, n_bytes=470898, priority=10,dl_dst=00:00:00:00:00:01 actions=group:1
+ cookie=0x0, duration=42.536s, table=0, n_packets=7987, n_bytes=556825, priority=10,dl_dst=00:00:00:00:00:02 actions=group:1
+ cookie=0x0, duration=42.536s, table=0, n_packets=10141, n_bytes=701801, priority=10,dl_dst=00:00:00:00:00:03 actions=group:1
+ cookie=0x0, duration=42.536s, table=0, n_packets=14699, n_bytes=1008159, priority=10,dl_dst=00:00:00:00:00:04 actions=group:1
+ cookie=0x0, duration=42.536s, table=0, n_packets=15860, n_bytes=22601589, priority=100,dl_dst=00:00:00:00:00:05 actions=output:"l2-h5"
+ cookie=0x0, duration=42.536s, table=0, n_packets=10974, n_bytes=15270936, priority=100,dl_dst=00:00:00:00:00:06 actions=output:"l2-h6"
+ cookie=0x0, duration=42.536s, table=0, n_packets=14299, n_bytes=20258118, priority=100,dl_dst=00:00:00:00:00:07 actions=output:"l2-h7"
+ cookie=0x0, duration=42.536s, table=0, n_packets=23490, n_bytes=34037651, priority=100,dl_dst=00:00:00:00:00:08 actions=output:"l2-h8"
+ cookie=0x0, duration=42.536s, table=0, n_packets=0, n_bytes=0, priority=20,tcp,tcp_flags=+syn-ack actions=CONTROLLER:128,group:1
+== l2 dump-ports
+OFPST_PORT reply (OF1.3) (xid=0x2): 9 ports
+  port LOCAL: rx pkts=0, bytes=0, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=0, bytes=0, drop=0, errs=0, coll=0
+           duration=42.559s
+  port  "l2-h8": rx pkts=14619, bytes=1001624, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=23234, bytes=33688152, drop=0, errs=0, coll=0
+           duration=42.559s
+  port  "l2-h5": rx pkts=8681, bytes=582079, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=15872, bytes=22602497, drop=0, errs=0, coll=0
+           duration=42.560s
+  port  "l2-s1": rx pkts=22503, bytes=32719143, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=21604, bytes=1480044, drop=0, errs=0, coll=0
+           duration=42.560s
+  port  "l2-h6": rx pkts=7453, bytes=519445, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=10986, bytes=15271844, drop=0, errs=0, coll=0
+           duration=42.560s
+  port  "l2-h7": rx pkts=9223, bytes=637299, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=14304, bytes=20248428, drop=0, errs=0, coll=0
+           duration=42.560s
+  port  "l2-s4": rx pkts=16185, bytes=22964692, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=8893, bytes=595737, drop=0, errs=0, coll=0
+           duration=42.559s
+  port  "l2-s2": rx pkts=2415, bytes=2336338, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=1835, bytes=130719, drop=0, errs=0, coll=0
+           duration=42.560s
+  port  "l2-s3": rx pkts=23564, bytes=34151393, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=7650, bytes=534087, drop=0, errs=0, coll=0
+           duration=42.559s
+== s1 dump-flows
+ cookie=0xc402, duration=33.481s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.6,tp_src=40415,tp_dst=5202 actions=output:"s1-l2"
+ cookie=0xc402, duration=33.481s, table=0, n_packets=20082, n_bytes=30402700, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.8,tp_src=40608,tp_dst=5204 actions=output:"s1-l2"
+ cookie=0xc402, duration=32.484s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.1,nw_dst=10.0.0.5,tp_src=40904,tp_dst=5201 actions=output:"s1-l2"
+ cookie=0xc402, duration=32.484s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.7,tp_src=40331,tp_dst=5203 actions=output:"s1-l2"
+ cookie=0xc402, duration=31.481s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.7,tp_src=28169,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0xc402, duration=29.476s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.8,tp_src=24072,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0xc402, duration=29.476s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.7,tp_src=31877,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0xc402, duration=27.464s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.8,tp_src=37889,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0xc402, duration=27.464s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.7,tp_src=25821,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0xc402, duration=26.454s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.8,tp_src=22405,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0xc402, duration=26.452s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.7,tp_src=36118,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0xc402, duration=25.450s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.8,tp_src=34433,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0xc402, duration=25.450s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.6,tp_src=29859,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0xc402, duration=25.449s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.7,tp_src=33766,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0xc402, duration=24.452s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.5,tp_src=31219,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0xc402, duration=22.448s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.5,tp_src=32922,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0xc402, duration=22.448s, table=0, n_packets=2, n_bytes=132, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.7,tp_src=33720,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0xc402, duration=20.460s, table=0, n_packets=3, n_bytes=198, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.8,tp_src=30231,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0xc402, duration=19.437s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.6,tp_src=28487,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0xc402, duration=19.437s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.8,tp_src=32954,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0xc402, duration=18.456s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.6,tp_src=36854,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0xc402, duration=18.456s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.7,tp_src=23966,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0xc402, duration=17.458s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.7,tp_src=36310,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0xc402, duration=16.459s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.8,tp_src=24484,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0xc402, duration=16.459s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.5,tp_src=38330,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0xc402, duration=16.456s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.6,tp_src=32653,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0xc402, duration=15.448s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.7,tp_src=34882,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0xc402, duration=14.446s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.6,tp_src=29309,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0xc402, duration=14.446s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.6,tp_src=20256,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0xc402, duration=14.442s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.5,tp_src=35432,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0xc402, duration=14.442s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.5,tp_src=39523,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0xc402, duration=13.452s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.5,tp_src=38973,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0xc402, duration=13.452s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.5,tp_src=38440,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0xc402, duration=12.457s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.7,tp_src=30063,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0xc402, duration=11.450s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.6,tp_src=26421,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0xc402, duration=9.447s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.7,tp_src=27417,tp_dst=8000 actions=output:"s1-l2"
+ cookie=0x0, duration=42.562s, table=0, n_packets=0, n_bytes=0, priority=100,dl_dst=00:00:00:00:00:01 actions=output:"s1-l1"
+ cookie=0x0, duration=42.562s, table=0, n_packets=441, n_bytes=31278, priority=100,dl_dst=00:00:00:00:00:02 actions=output:"s1-l1"
+ cookie=0x0, duration=42.562s, table=0, n_packets=8087, n_bytes=556724, priority=100,dl_dst=00:00:00:00:00:03 actions=output:"s1-l1"
+ cookie=0x0, duration=42.562s, table=0, n_packets=13067, n_bytes=891316, priority=100,dl_dst=00:00:00:00:00:04 actions=output:"s1-l1"
+ cookie=0x0, duration=42.562s, table=0, n_packets=473, n_bytes=360162, priority=100,dl_dst=00:00:00:00:00:05 actions=output:"s1-l2"
+ cookie=0x0, duration=42.562s, table=0, n_packets=399, n_bytes=325744, priority=100,dl_dst=00:00:00:00:00:06 actions=output:"s1-l2"
+ cookie=0x0, duration=42.562s, table=0, n_packets=486, n_bytes=412316, priority=100,dl_dst=00:00:00:00:00:07 actions=output:"s1-l2"
+ cookie=0x0, duration=42.562s, table=0, n_packets=1046, n_bytes=1217027, priority=100,dl_dst=00:00:00:00:00:08 actions=output:"s1-l2"
+== s1 dump-ports
+OFPST_PORT reply (OF1.3) (xid=0x2): 3 ports
+  port LOCAL: rx pkts=0, bytes=0, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=0, bytes=0, drop=0, errs=0, coll=0
+           duration=42.579s
+  port  "s1-l1": rx pkts=22507, bytes=32719327, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=21604, bytes=1480044, drop=0, errs=0, coll=0
+           duration=42.580s
+  port  "s1-l2": rx pkts=21604, bytes=1480044, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=22503, bytes=32719143, drop=0, errs=0, coll=0
+           duration=42.580s
+== s2 dump-flows
+ cookie=0xc402, duration=33.508s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.6,tp_src=40415,tp_dst=5202 actions=output:"s2-l2"
+ cookie=0xc402, duration=33.508s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.8,tp_src=40608,tp_dst=5204 actions=output:"s2-l2"
+ cookie=0xc402, duration=32.511s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.1,nw_dst=10.0.0.5,tp_src=40904,tp_dst=5201 actions=output:"s2-l2"
+ cookie=0xc402, duration=32.511s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.7,tp_src=40331,tp_dst=5203 actions=output:"s2-l2"
+ cookie=0xc402, duration=31.508s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.7,tp_src=28169,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0xc402, duration=29.503s, table=0, n_packets=258, n_bytes=386911, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.8,tp_src=24072,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0xc402, duration=29.503s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.7,tp_src=31877,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0xc402, duration=27.491s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.8,tp_src=37889,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0xc402, duration=27.491s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.7,tp_src=25821,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0xc402, duration=26.480s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.8,tp_src=22405,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0xc402, duration=26.479s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.7,tp_src=36118,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0xc402, duration=25.477s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.8,tp_src=34433,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0xc402, duration=25.477s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.6,tp_src=29859,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0xc402, duration=25.476s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.7,tp_src=33766,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0xc402, duration=24.478s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.5,tp_src=31219,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0xc402, duration=22.475s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.5,tp_src=32922,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0xc402, duration=22.475s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.7,tp_src=33720,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0xc402, duration=20.487s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.8,tp_src=30231,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0xc402, duration=19.464s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.6,tp_src=28487,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0xc402, duration=19.464s, table=0, n_packets=3, n_bytes=1646, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.8,tp_src=32954,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0xc402, duration=18.483s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.6,tp_src=36854,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0xc402, duration=18.483s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.7,tp_src=23966,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0xc402, duration=17.485s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.7,tp_src=36310,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0xc402, duration=16.486s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.8,tp_src=24484,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0xc402, duration=16.483s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.5,tp_src=38330,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0xc402, duration=16.483s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.6,tp_src=32653,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0xc402, duration=15.475s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.7,tp_src=34882,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0xc402, duration=14.473s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.6,tp_src=29309,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0xc402, duration=14.473s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.6,tp_src=20256,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0xc402, duration=14.469s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.5,tp_src=35432,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0xc402, duration=14.469s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.5,tp_src=39523,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0xc402, duration=13.478s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.5,tp_src=38973,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0xc402, duration=13.477s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.5,tp_src=38440,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0xc402, duration=12.480s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.7,tp_src=30063,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0xc402, duration=11.477s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.6,tp_src=26421,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0xc402, duration=9.474s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.7,tp_src=27417,tp_dst=8000 actions=output:"s2-l2"
+ cookie=0x0, duration=42.582s, table=0, n_packets=13, n_bytes=1202, priority=100,dl_dst=00:00:00:00:00:01 actions=output:"s2-l1"
+ cookie=0x0, duration=42.582s, table=0, n_packets=510, n_bytes=36583, priority=100,dl_dst=00:00:00:00:00:02 actions=output:"s2-l1"
+ cookie=0x0, duration=42.582s, table=0, n_packets=748, n_bytes=52386, priority=100,dl_dst=00:00:00:00:00:03 actions=output:"s2-l1"
+ cookie=0x0, duration=42.582s, table=0, n_packets=555, n_bytes=39822, priority=100,dl_dst=00:00:00:00:00:04 actions=output:"s2-l1"
+ cookie=0x0, duration=42.582s, table=0, n_packets=470, n_bytes=369607, priority=100,dl_dst=00:00:00:00:00:05 actions=output:"s2-l2"
+ cookie=0x0, duration=42.582s, table=0, n_packets=477, n_bytes=371640, priority=100,dl_dst=00:00:00:00:00:06 actions=output:"s2-l2"
+ cookie=0x0, duration=42.582s, table=0, n_packets=378, n_bytes=317468, priority=100,dl_dst=00:00:00:00:00:07 actions=output:"s2-l2"
+ cookie=0x0, duration=42.582s, table=0, n_packets=818, n_bytes=888248, priority=100,dl_dst=00:00:00:00:00:08 actions=output:"s2-l2"
+== s2 dump-ports
+OFPST_PORT reply (OF1.3) (xid=0x2): 3 ports
+  port LOCAL: rx pkts=0, bytes=0, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=0, bytes=0, drop=0, errs=0, coll=0
+           duration=42.597s
+  port  "s2-l1": rx pkts=2419, bytes=2336522, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=1835, bytes=130719, drop=0, errs=0, coll=0
+           duration=42.598s
+  port  "s2-l2": rx pkts=1835, bytes=130719, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=2415, bytes=2336338, drop=0, errs=0, coll=0
+           duration=42.598s
+== s3 dump-flows
+ cookie=0xc402, duration=33.532s, table=0, n_packets=8927, n_bytes=13514030, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.6,tp_src=40415,tp_dst=5202 actions=output:"s3-l2"
+ cookie=0xc402, duration=33.532s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.8,tp_src=40608,tp_dst=5204 actions=output:"s3-l2"
+ cookie=0xc402, duration=32.535s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.1,nw_dst=10.0.0.5,tp_src=40904,tp_dst=5201 actions=output:"s3-l2"
+ cookie=0xc402, duration=32.535s, table=0, n_packets=12096, n_bytes=18313344, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.7,tp_src=40331,tp_dst=5203 actions=output:"s3-l2"
+ cookie=0xc402, duration=31.532s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.7,tp_src=28169,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0xc402, duration=29.527s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.8,tp_src=24072,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0xc402, duration=29.527s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.7,tp_src=31877,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0xc402, duration=27.515s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.8,tp_src=37889,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0xc402, duration=27.515s, table=0, n_packets=12, n_bytes=14030, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.7,tp_src=25821,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0xc402, duration=26.505s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.8,tp_src=22405,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0xc402, duration=26.503s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.7,tp_src=36118,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0xc402, duration=25.500s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.8,tp_src=34433,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0xc402, duration=25.500s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.6,tp_src=29859,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0xc402, duration=25.500s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.7,tp_src=33766,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0xc402, duration=24.502s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.5,tp_src=31219,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0xc402, duration=22.499s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.5,tp_src=32922,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0xc402, duration=22.499s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.7,tp_src=33720,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0xc402, duration=20.511s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.8,tp_src=30231,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0xc402, duration=19.488s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.6,tp_src=28487,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0xc402, duration=19.488s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.8,tp_src=32954,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0xc402, duration=18.508s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.6,tp_src=36854,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0xc402, duration=18.507s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.7,tp_src=23966,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0xc402, duration=17.509s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.7,tp_src=36310,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0xc402, duration=16.510s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.8,tp_src=24484,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0xc402, duration=16.507s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.5,tp_src=38330,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0xc402, duration=16.507s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.6,tp_src=32653,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0xc402, duration=15.499s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.7,tp_src=34882,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0xc402, duration=14.497s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.6,tp_src=29309,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0xc402, duration=14.493s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.6,tp_src=20256,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0xc402, duration=14.493s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.5,tp_src=35432,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0xc402, duration=14.493s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.5,tp_src=39523,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0xc402, duration=13.503s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.5,tp_src=38973,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0xc402, duration=13.501s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.5,tp_src=38440,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0xc402, duration=12.504s, table=0, n_packets=5, n_bytes=4334, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.7,tp_src=30063,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0xc402, duration=11.501s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.6,tp_src=26421,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0xc402, duration=9.498s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.7,tp_src=27417,tp_dst=8000 actions=output:"s3-l2"
+ cookie=0x0, duration=42.593s, table=0, n_packets=8, n_bytes=640, priority=100,dl_dst=00:00:00:00:00:01 actions=output:"s3-l1"
+ cookie=0x0, duration=42.593s, table=0, n_packets=6450, n_bytes=447462, priority=100,dl_dst=00:00:00:00:00:02 actions=output:"s3-l1"
+ cookie=0x0, duration=42.593s, table=0, n_packets=676, n_bytes=48726, priority=100,dl_dst=00:00:00:00:00:03 actions=output:"s3-l1"
+ cookie=0x0, duration=42.593s, table=0, n_packets=507, n_bytes=36533, priority=100,dl_dst=00:00:00:00:00:04 actions=output:"s3-l1"
+ cookie=0x0, duration=42.593s, table=0, n_packets=416, n_bytes=299407, priority=100,dl_dst=00:00:00:00:00:05 actions=output:"s3-l2"
+ cookie=0x0, duration=42.593s, table=0, n_packets=640, n_bytes=612554, priority=100,dl_dst=00:00:00:00:00:06 actions=output:"s3-l2"
+ cookie=0x0, duration=42.593s, table=0, n_packets=831, n_bytes=835631, priority=100,dl_dst=00:00:00:00:00:07 actions=output:"s3-l2"
+ cookie=0x0, duration=42.593s, table=0, n_packets=627, n_bytes=557291, priority=100,dl_dst=00:00:00:00:00:08 actions=output:"s3-l2"
+== s3 dump-ports
+OFPST_PORT reply (OF1.3) (xid=0x2): 3 ports
+  port LOCAL: rx pkts=0, bytes=0, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=0, bytes=0, drop=0, errs=0, coll=0
+           duration=42.614s
+  port  "s3-l1": rx pkts=23567, bytes=34151507, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=7650, bytes=534087, drop=0, errs=0, coll=0
+           duration=42.614s
+  port  "s3-l2": rx pkts=7650, bytes=534087, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=23564, bytes=34151393, drop=0, errs=0, coll=0
+           duration=42.614s
+== s4 dump-flows
+ cookie=0xc402, duration=33.557s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.6,tp_src=40415,tp_dst=5202 actions=output:"s4-l2"
+ cookie=0xc402, duration=33.556s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.8,tp_src=40608,tp_dst=5204 actions=output:"s4-l2"
+ cookie=0xc402, duration=32.559s, table=0, n_packets=13500, n_bytes=20437552, priority=150,tcp,nw_src=10.0.0.1,nw_dst=10.0.0.5,tp_src=40904,tp_dst=5201 actions=output:"s4-l2"
+ cookie=0xc402, duration=32.559s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.7,tp_src=40331,tp_dst=5203 actions=output:"s4-l2"
+ cookie=0xc402, duration=31.556s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.7,tp_src=28169,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0xc402, duration=29.551s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.8,tp_src=24072,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0xc402, duration=29.550s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.7,tp_src=31877,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0xc402, duration=27.539s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.8,tp_src=37889,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0xc402, duration=27.539s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.7,tp_src=25821,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0xc402, duration=26.529s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.8,tp_src=22405,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0xc402, duration=26.527s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.7,tp_src=36118,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0xc402, duration=25.525s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.8,tp_src=34433,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0xc402, duration=25.524s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.6,tp_src=29859,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0xc402, duration=25.524s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.7,tp_src=33766,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0xc402, duration=24.526s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.5,tp_src=31219,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0xc402, duration=22.523s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.5,tp_src=32922,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0xc402, duration=22.523s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.7,tp_src=33720,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0xc402, duration=20.535s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.8,tp_src=30231,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0xc402, duration=19.512s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.6,tp_src=28487,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0xc402, duration=19.512s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.8,tp_src=32954,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0xc402, duration=18.530s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.6,tp_src=36854,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0xc402, duration=18.530s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.7,tp_src=23966,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0xc402, duration=17.533s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.7,tp_src=36310,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0xc402, duration=16.530s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.8,tp_src=24484,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0xc402, duration=16.530s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.5,tp_src=38330,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0xc402, duration=16.530s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.6,tp_src=32653,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0xc402, duration=15.520s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.7,tp_src=34882,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0xc402, duration=14.521s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.6,tp_src=29309,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0xc402, duration=14.518s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.6,tp_src=20256,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0xc402, duration=14.517s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.5,tp_src=35432,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0xc402, duration=14.517s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.5,tp_src=39523,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0xc402, duration=13.525s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.5,tp_src=38973,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0xc402, duration=13.525s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.5,tp_src=38440,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0xc402, duration=12.528s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.7,tp_src=30063,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0xc402, duration=11.525s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.6,tp_src=26421,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0xc402, duration=9.522s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.4,nw_dst=10.0.0.7,tp_src=27417,tp_dst=8000 actions=output:"s4-l2"
+ cookie=0x0, duration=42.609s, table=0, n_packets=7098, n_bytes=469056, priority=100,dl_dst=00:00:00:00:00:01 actions=output:"s4-l1"
+ cookie=0x0, duration=42.609s, table=0, n_packets=586, n_bytes=41502, priority=100,dl_dst=00:00:00:00:00:02 actions=output:"s4-l1"
+ cookie=0x0, duration=42.609s, table=0, n_packets=630, n_bytes=43965, priority=100,dl_dst=00:00:00:00:00:03 actions=output:"s4-l1"
+ cookie=0x0, duration=42.609s, table=0, n_packets=570, n_bytes=40488, priority=100,dl_dst=00:00:00:00:00:04 actions=output:"s4-l1"
+ cookie=0x0, duration=42.609s, table=0, n_packets=1001, n_bytes=1134861, priority=100,dl_dst=00:00:00:00:00:05 actions=output:"s4-l2"
+ cookie=0x0, duration=42.609s, table=0, n_packets=531, n_bytes=446968, priority=100,dl_dst=00:00:00:00:00:06 actions=output:"s4-l2"
+ cookie=0x0, duration=42.609s, table=0, n_packets=489, n_bytes=360863, priority=100,dl_dst=00:00:00:00:00:07 actions=output:"s4-l2"
+ cookie=0x0, duration=42.609s, table=0, n_packets=653, n_bytes=583630, priority=100,dl_dst=00:00:00:00:00:08 actions=output:"s4-l2"
+== s4 dump-ports
+OFPST_PORT reply (OF1.3) (xid=0x2): 3 ports
+  port LOCAL: rx pkts=0, bytes=0, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=0, bytes=0, drop=0, errs=0, coll=0
+           duration=42.627s
+  port  "s4-l1": rx pkts=16189, bytes=22964876, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=8893, bytes=595737, drop=0, errs=0, coll=0
+           duration=42.627s
+  port  "s4-l2": rx pkts=8893, bytes=595737, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=16185, bytes=22964692, drop=0, errs=0, coll=0
+           duration=42.627s

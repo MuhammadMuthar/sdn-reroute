@@ -1,0 +1,139 @@
+{
+ "scenario": "damage_moves",
+ "condition": "C",
+ "seed": 10030,
+ "duration": 27,
+ "hosts": {
+  "h1": "10.0.0.1",
+  "h2": "10.0.0.2",
+  "h3": "10.0.0.3",
+  "h4": "10.0.0.4",
+  "h5": "10.0.0.5",
+  "h6": "10.0.0.6",
+  "h7": "10.0.0.7",
+  "h8": "10.0.0.8"
+ },
+ "elephants": [
+  {
+   "id": "E1",
+   "src": "h1",
+   "dst": "h5",
+   "src_ip": "10.0.0.1",
+   "dst_ip": "10.0.0.5",
+   "sport": 40613,
+   "dport": 5201,
+   "start": 0.3705,
+   "duration": 27
+  },
+  {
+   "id": "E2",
+   "src": "h2",
+   "dst": "h6",
+   "src_ip": "10.0.0.2",
+   "dst_ip": "10.0.0.6",
+   "sport": 40824,
+   "dport": 5202,
+   "start": 0.4495,
+   "duration": 27
+  },
+  {
+   "id": "E3",
+   "src": "h3",
+   "dst": "h7",
+   "src_ip": "10.0.0.3",
+   "dst_ip": "10.0.0.7",
+   "sport": 40315,
+   "dport": 5203,
+   "start": 0.2635,
+   "duration": 27
+  },
+  {
+   "id": "E4",
+   "src": "h4",
+   "dst": "h8",
+   "src_ip": "10.0.0.4",
+   "dst_ip": "10.0.0.8",
+   "sport": 40792,
+   "dport": 5204,
+   "start": 0.4482,
+   "duration": 27
+  }
+ ],
+ "mice": [],
+ "pins": [
+  {
+   "flow": "E1",
+   "spine": 1
+  },
+  {
+   "flow": "E2",
+   "spine": 3
+  },
+  {
+   "flow": "E3",
+   "spine": 3
+  },
+  {
+   "flow": "E4",
+   "spine": 1
+  }
+ ],
+ "moves": [
+  {
+   "at": 3.188,
+   "flow": "E1",
+   "spine": 1
+  },
+  {
+   "at": 13.188,
+   "flow": "E1",
+   "spine": 1
+  }
+ ],
+ "tagged": [
+  "E1",
+  "E2",
+  "E3",
+  "E4"
+ ],
+ "snapshots": [
+  -2.0,
+  0.0,
+  2.0,
+  5.0,
+  10.0
+ ],
+ "ack_spine": null,
+ "snapshots_last_only": true,
+ "design": {
+  "trial": 30,
+  "arm": "C",
+  "moved": [
+   "E1"
+  ],
+  "pre": {
+   "E2": 3,
+   "E3": 3,
+   "E4": 1,
+   "E1": 3
+  },
+  "post": {
+   "E2": 3,
+   "E3": 3,
+   "E4": 1,
+   "E1": 1
+  },
+  "p": 3,
+  "q": 1,
+  "n_p": 2,
+  "n_q": 1,
+  "cap": null,
+  "mice": false,
+  "n_prev": 1,
+  "r": 1,
+  "delta": 10.0,
+  "t_move": 13.188,
+  "t_prev": 3.188
+ },
+ "sha256": "9ebefcf141b82d85f6a546db4b68ec8662e2fea37774776da8368af4f7175afe"
+}

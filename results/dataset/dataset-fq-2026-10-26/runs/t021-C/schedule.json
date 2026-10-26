@@ -1,0 +1,141 @@
+{
+ "scenario": "damage_moves",
+ "condition": "C",
+ "seed": 10021,
+ "duration": 27,
+ "hosts": {
+  "h1": "10.0.0.1",
+  "h2": "10.0.0.2",
+  "h3": "10.0.0.3",
+  "h4": "10.0.0.4",
+  "h5": "10.0.0.5",
+  "h6": "10.0.0.6",
+  "h7": "10.0.0.7",
+  "h8": "10.0.0.8"
+ },
+ "elephants": [
+  {
+   "id": "E1",
+   "src": "h1",
+   "dst": "h5",
+   "src_ip": "10.0.0.1",
+   "dst_ip": "10.0.0.5",
+   "sport": 40590,
+   "dport": 5201,
+   "start": 0.07,
+   "duration": 27,
+   "pacing": "6M"
+  },
+  {
+   "id": "E2",
+   "src": "h2",
+   "dst": "h6",
+   "src_ip": "10.0.0.2",
+   "dst_ip": "10.0.0.6",
+   "sport": 40508,
+   "dport": 5202,
+   "start": 0.4082,
+   "duration": 27
+  },
+  {
+   "id": "E3",
+   "src": "h3",
+   "dst": "h7",
+   "src_ip": "10.0.0.3",
+   "dst_ip": "10.0.0.7",
+   "sport": 40789,
+   "dport": 5203,
+   "start": 0.1986,
+   "duration": 27
+  },
+  {
+   "id": "E4",
+   "src": "h4",
+   "dst": "h8",
+   "src_ip": "10.0.0.4",
+   "dst_ip": "10.0.0.8",
+   "sport": 40701,
+   "dport": 5204,
+   "start": 0.3651,
+   "duration": 27
+  }
+ ],
+ "mice": [],
+ "pins": [
+  {
+   "flow": "E1",
+   "spine": 3
+  },
+  {
+   "flow": "E2",
+   "spine": 3
+  },
+  {
+   "flow": "E3",
+   "spine": 3
+  },
+  {
+   "flow": "E4",
+   "spine": 2
+  }
+ ],
+ "moves": [
+  {
+   "at": 7.566,
+   "flow": "E1",
+   "spine": 3
+  },
+  {
+   "at": 12.566,
+   "flow": "E1",
+   "spine": 3
+  }
+ ],
+ "tagged": [
+  "E1",
+  "E2",
+  "E3",
+  "E4"
+ ],
+ "snapshots": [
+  -2.0,
+  0.0,
+  2.0,
+  5.0,
+  10.0
+ ],
+ "ack_spine": null,
+ "snapshots_last_only": true,
+ "design": {
+  "trial": 21,
+  "arm": "C",
+  "moved": [
+   "E1"
+  ],
+  "pre": {
+   "E4": 2,
+   "E3": 3,
+   "E2": 3,
+   "E1": 2
+  },
+  "post": {
+   "E4": 2,
+   "E3": 3,
+   "E2": 3,
+   "E1": 3
+  },
+  "cap_mode": "fq",
+  "p": 2,
+  "q": 3,
+  "n_p": 1,
+  "n_q": 2,
+  "cap": "6M",
+  "mice": false,
+  "n_prev": 1,
+  "r": 3,
+  "delta": 5.0,
+  "t_move": 12.566,
+  "t_prev": 7.566
+ },
+ "sha256": "af694d40d5f6f155494c71ad81b979a80bc247a5c46f00c06dce314bd3b20d06"
+}

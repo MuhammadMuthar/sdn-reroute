@@ -271,6 +271,8 @@ DESIGN_DICTIONARY = {
     "scenario": "direction (slow->fast, fast->slow, same) | q<elephants already on the destination>",
     "pair": "source>destination spine; held-out group of the design rows (group column)",
     "trial": "design trial (experiments/damage_design.py), runs t<trial>-T and -C",
+    "campaign": "the design campaign directory the row comes from",
+    "cap_mode": "[design] how the cap was applied: b = iperf3 -b (an average, catches up), fq = --fq-rate pacing",
     "excluded": "why the row has no label (empty = analysed)",
     "n_p_design": "[design] elephants other than the moved one on the source",
     "n_q_design": "[design] elephants on the destination (bystanders)",
@@ -298,8 +300,8 @@ def _design_runs(ddir):
     out = {}
     for rd in sorted(glob.glob(os.path.join(ddir, "runs", "*"))):
         sp = os.path.join(rd, "schedule.json")
-        if not os.path.exists(sp):
-            continue
+        if not (os.path.exists(sp) and os.path.exists(os.path.join(rd, "meta.json"))):
+            continue                     # not run yet, or still running
         s = json.load(open(sp))
         des = s.get("design")
         if des:
@@ -384,6 +386,7 @@ def design_pair(T, C):
     bystanders = sorted(f for f in elephants if f != fid and post[f] == q)
     left_behind = sorted(f for f in elephants if f != fid and post[f] == p)
     row = dict(source="design", trial=des["trial"], live_run="t%03d" % des["trial"],
+               cap_mode=des.get("cap_mode", "b" if des["cap"] else ""),
                controller="deliberate", seed=sT["seed"], flow=fid, from_spine=p, to_spine=q,
                n_moved_in_event=1, n_bystanders=len(bystanders), n_p_design=des["n_p"],
                n_q_design=des["n_q"], cap=des["cap"] or "", mice=int(bool(des["mice"])),
@@ -394,6 +397,8 @@ def design_pair(T, C):
     row["scenario"] = "%s|q%d" % ("slow->fast" if gap < 0 else "fast->slow" if gap > 0 else "same",
                                   des["n_q"])
     row["group"] = row["pair"]
+    if not all(os.path.exists(os.path.join(d, "run_flows.csv")) for d in (rdT, rdC)):
+        return row, "run without metrics (failed or unfinished)"
     if mT.get("errors") or mC.get("errors"):
         return row, "run error: %s" % " | ".join((mT.get("errors") or []) + (mC.get("errors") or []))
     bT, repT = _main_move(mT)
@@ -475,16 +480,32 @@ def design_pair(T, C):
 
 def build_design(ddir):
     rows = []
+    camp = os.path.basename(os.path.abspath(ddir))
     for k, arms in sorted(_design_runs(ddir).items()):
         if "T" not in arms or "C" not in arms:
-            rows.append(dict(source="design", trial=k, live_run="t%03d" % k,
+            rows.append(dict(source="design", trial=k, live_run="t%03d" % k, campaign=camp,
                              excluded="missing arm (%s)" % ",".join(sorted(arms)), replay_ok=0))
             continue
         row, why = design_pair(arms["T"], arms["C"])
+        row["campaign"] = camp
         row["excluded"] = why
         row["replay_ok"] = int(not why)
         rows.append(row)
     return pd.DataFrame(rows)
+
+
+def supersede_b_caps(df):
+    """Post hoc (LOG.md, Chunk 5): a trial capped with iperf3 -b and rerun with
+    --fq-rate keeps its -b row without a label, because -b catches up after a
+    stall at full rate (application behaviour, not damage)."""
+    if "cap_mode" not in df:
+        return df
+    fq = set(df[(df.source == "design") & (df.cap_mode == "fq")].trial)
+    m = (df.source == "design") & (df.cap_mode == "b") & df.trial.isin(fq)
+    df.loc[m, "excluded"] = ("capped with iperf3 -b, which can catch up at full rate after a "
+                             "stall (5 of the 28 did); superseded by the --fq-rate rerun")
+    df.loc[m, "replay_ok"] = 0
+    return df
 
 
 # ---------------------------------------------------------------- outputs
@@ -543,9 +564,11 @@ def summary(df, corr, out_md, sources):
     if len(ex):
         def who(r):
             if r.source == "design":
-                return "design trial %s (%s)" % (r.trial, r.get("pair", ""))
+                return "%s trial %d (%s)" % (r.get("campaign", "design"), int(r.trial),
+                                             r.get("pair", ""))
             return "chunk4 %s round %s %s" % (r.live_run, r["round"], r.flow)
-        L += ["Excluded (pre-registered rules):"] + ["- %s: %s" % (who(r), r.excluded)
+        L += ["Excluded (the pre-registered rules; the iperf3 -b rule is post hoc, LOG.md "
+              "Chunk 5):"] + ["- %s: %s" % (who(r), r.excluded)
                                                      for _, r in ex.iterrows()] + [""]
     for col in ("moved_deficit", "bystander_deficit", "dest_total_deficit", "all_total_deficit"):
         for w in WINDOWS:
@@ -567,6 +590,12 @@ def summary(df, corr, out_md, sources):
                 lab, len(g), _mean_ci(g.moved_mbps_W2), _mean_ci(g.moved_mbps_W10),
                 _mean_ci(g.bystander_mbps_W10), _mean_ci(g.dest_total_mbps_W2),
                 _mean_ci(g.dest_total_mbps_W10)))
+        L += ["", "Design rows with a reordering seen by the moved flow's socket in the 2 s after "
+              "the move (ss reord_seen > 0), move arm / no-move arm: " + "; ".join(
+                  "%s %d / %d of %d" % (v, int((g.ss_reord_seen_W2_T > 0).sum()),
+                                        int((g.ss_reord_seen_W2_C > 0).sum()), len(g))
+                  for v, g in ((v, dd[dd.scenario.str.startswith(v + "|")])
+                               for v in ("slow->fast", "same", "fast->slow"))) + "."]
         L += ["", "Moved flow's own socket (ss) in the 2 s after the move, mean over design rows, "
               "move arm / no-move arm: reord_seen %s / %s, dsack_dups %s / %s, retransmissions "
               "%s / %s." % tuple(_mean_ci(dd["ss_%s_W2_%s" % (k, a)]) for k in
@@ -658,14 +687,14 @@ def main():
         c4.loc[c4.excluded != "", "replay_ok"] = 0
         parts.append(c4)
         sources.append("%s + %s" % (os.path.relpath(a.live, REPO), os.path.relpath(a.replay, REPO)))
-    df = pd.concat(parts, ignore_index=True, sort=False)
-    cols = ["source", "scenario", "group", "pair", "trial"] + list(DICTIONARY) + \
-        [k for k in DESIGN_DICTIONARY if k not in ("source", "scenario", "pair", "trial")]
+    df = supersede_b_caps(pd.concat(parts, ignore_index=True, sort=False))
+    cols = list(dict.fromkeys(["source", "campaign", "scenario", "group", "pair", "trial"] +
+                              list(DICTIONARY) + list(DESIGN_DICTIONARY)))
     for c in cols:
         if c not in df.columns:
             df[c] = np.nan
     df = df[cols + [c for c in df.columns if c not in cols]]
-    df.to_csv(os.path.join(a.out, "dataset.csv"), index=False, float_format="%.6g")
+    df.to_csv(os.path.join(a.out, "dataset.csv"), index=False, float_format="%.10g")
     write_dictionary(os.path.join(a.out, "data_dictionary.md"), df)
     corr = pd.concat([correlations(df[df.source == "design"], CORR_TARGETS).assign(rows="design"),
                       correlations(df, CORR_TARGETS).assign(rows="all")], ignore_index=True)

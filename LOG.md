@@ -1201,3 +1201,121 @@ an extra group of real controller decisions.
   term positive, so the total is nearer zero than the moved term; (3) the
   destination-path total is small, mean |W10| < 0.5 Mbit/s overall; (4) E1's
   socket sees a reordering in W2 in most slow->fast moves and few others.
+
+### Campaign run (16:25-18:35 UTC), and a flaw found in the rate-cap factor
+`results/dataset/dataset-2026-10-26`: 120 of 120 runs ok (51-67 s), same
+boot; all 60 trials passed every pre-registered check (none excluded). In
+the first look at the labels, moves onto an empty uplink showed a negative
+destination-path deficit (-0.46 ± 0.43 Mbit/s at W10, n_q = 0): the moved
+flow did better than one that had been on that uplink all along. Cause:
+iperf3's `-b` cap is an average since the start, so a capped E1 held below
+its cap on a crowded source path sends flat out after the move until it has
+caught up (trial 49, 6 Mbit/s cap: 1-4 Mbit/s before the move, 9.4 Mbit/s
+for over 10 s after it; the no-move arm at 6.0). Five of the 28 capped trials
+are above their cap over W10 in the move arm; 11 were below 90 % of it before
+the move. That is application behaviour, not TCP damage, so the factor did
+not do what the plan meant (a flow rate).
+
+Decision (post hoc, this thread, before any other label was read): keep the
+campaign as recorded and report its pre-registered summary, and rerun the 28
+capped trials with a true cap: iperf3 `--fq-rate` (SO_MAX_PACING_RATE, TCP's
+own pacing), same design draw, same seeds, same everything else
+(`damage_design.py --cap-mode fq --capped-only`, runner key `pacing`). Pilot
+(results/dataset/dev-fq-pilot, trial 49, not committed): 1-3 Mbit/s before
+the move, 5.2-6.3 after, no catch-up; the no-move arm 5.2-6.3. In the
+dataset the -b capped rows stay with replay_ok = 0 and the reason, the fq
+rows replace them, and the 32 uncapped trials are unchanged. Also checked
+here, post hoc: Open vSwitch's own counters for the monitoring artifact
+(below).
+
+### OVS counters: the monitoring artifact's mechanism (post hoc check)
+`runner.py campaign --controllers ecmp,ecmp_mon --scenario ecmp_mixed --runs
+1 --seed 1 --ovs-stats --out results/compare/upcall-2026-10-26` (new runner
+flag: ovs-appctl dpctl/show, upcall/show, coverage/show at the start and end
+of a run), `analysis/upcall_check.py` (upcall_check.md). Over one 30 s run,
+ECMP / monitor-only: datapath misses (packets to the slow path) 242 / 6178,
+i.e. 0.23 / 5.86 per flow started; revalidations triggered by flow-table
+changes (rev_flow_table) 0 / 1583; duplicate upcalls (more packets of one
+flow upcalled before its datapath flow exists) 0 / 1831; packets executed
+from user space 281 / 6201; datapath flow installs 281 / 4369 and deletes
+77 / 2629; lost 0 / 0. This confirms the inference: with the per-flow
+counting rules the first packets of a new flow go through ovs-vswitchd's
+slow path while later ones take the fast path, which reorders them.
+
+### Rerun with a true cap (18:46-19:44 UTC)
+`results/dataset/dataset-fq-2026-10-26`: 56 of 56 runs ok, same boot; none of
+the 28 trials excluded; no capped flow above 1.08 x its cap after the move
+(0 of 28; the -b campaign: 5 of 28, trials 1, 25, 41, 49, 51).
+
+### Result: the dataset (results/dataset/dataset-2026-10-26/dataset/, figures/damage_correlations.png, damage_vs_features.png)
+`analysis/damage_dataset.py --design dataset-2026-10-26 --design
+dataset-fq-2026-10-26 --live compare-2026-10-26 --replay damage-2026-10-26`.
+Rows: 124 = 60 first-campaign trials + 28 reruns + 36 Chunk 4 rows; 90 with
+a label: 60 design rows (32 uncapped from the first campaign, the 28 fq
+reruns) and 30 Chunk 4 rows (6 removed by its sensitivity rules); the 28 -b
+capped rows stay without a label and with the reason. No design trial hit a
+pre-registered exclusion. 13 groups for Chunk 6 (12 spine pairs, chunk4).
+Design rows, deficit = no-move minus move, Mbit/s, mean ± 95 % CI:
+- Destination-path total at W10 -0.010 ± 0.012, at W2 -0.058 ± 0.063; 58 of
+  60 within ±0.1 Mbit/s at W10. The two others: trial 52 at -0.33 (its
+  no-move arm had two RTOs right after the sham, h1's nstat, which carries
+  only E1) and trial 59 at +0.10.
+- By direction: moved term at W2 slow->fast -0.27 ± 0.23 (the moved flow
+  gains), same +0.13 ± 0.36, fast->slow +0.32 ± 0.25 (it loses); totals at
+  W10 -0.017 ± 0.029, -0.006 ± 0.010, -0.004 ± 0.008.
+- By elephants on the destination, W10: n_q = 0 total -0.004 ± 0.036 (the
+  moved term alone); n_q = 1 moved +0.14 ± 0.19, bystanders -0.15 ± 0.19,
+  total -0.016 ± 0.006; n_q = 2 moved -0.04 ± 0.24, bystanders +0.03 ± 0.24,
+  total -0.009 ± 0.012. Previous move (28) -0.016 ± 0.025, flaps (13) -0.032
+  ± 0.055, mice on (30) -0.014 ± 0.025.
+- The moved flow's socket in W2, move arm / no-move arm: a reordering seen
+  in 14 / 0 of 25 slow->fast, 3 / 0 of 10 same-delay, 7 / 0 of 25 fast->slow
+  trials; reord_seen 1.38 vs 0, dsack_dups 0.78 vs 0, retransmissions 12.4
+  vs 7.9 (about 4.5 more per move).
+- Spearman r with the W10 total (design rows, n = 60): predicted gain +0.53,
+  unacked before the move -0.40, rate -0.38, elephants on the destination
+  -0.38, U_q -0.36, cwnd before -0.33, rate share on q +0.24, delay gap
+  -0.02 (all rows, n = 90: gain +0.38, elephants on q -0.31). Most labels
+  lie within ±0.03 Mbit/s, so these rank correlations order very small
+  differences.
+- The first campaign as run (dataset-as-run/summary.md, the pre-registered
+  summary with the -b caps): W10 total -0.168 ± 0.154 overall and -0.46 ±
+  0.43 for n_q = 0, the catch-up artifact; the uncapped trials alone give
+  -0.021 ± 0.021.
+Expectations stated before the campaign: (1) moved term at W2 larger for
+slow->fast: not supported, opposite sign (as Chunk 3's P1); (2) total nearer
+zero than the moved term with elephants on the destination: yes; (3) mean
+|W10 total| < 0.5 Mbit/s: yes; (4) a reordering in most slow->fast moves and
+few others: 56 % of slow->fast, but also 28 % of fast->slow.
+Reading: over delay gaps of -9 .. +9 ms, 0-2 elephants on either path, rate
+caps, mice, and moves 2-10 s after a previous one (flaps included), a
+reroute shifts up to about 0.3 Mbit/s between the moved flow and the others
+for 2 s and reorders the moved flow in 40 % of moves, but the destination
+path as a whole loses nothing measurable over 2-10 s. On this setup (10
+Mbit/s, 1-10 ms one-way, CUBIC with RACK and DSACK undo) there is little
+damage for a cost-aware controller to avoid. Late starts: in 52 elephant-arm
+cases an elephant's first packet came 0.5-2.7 s after its scheduled start
+(a lost SYN at the simultaneous start), all long before the moves.
+
+### Fixes after the results were read
+- analysis/damage_dataset.py: a duplicated `campaign` column broke the
+  exclusion list in summary.md; dataset.csv now written with 10 significant
+  digits (with 6, 34 values above 1 MB were rounded by 2-5 bytes; found by
+  the recomputation, no summary number affected); the superseded -b rows'
+  reason no longer says all 28 caught up.
+
+### Independent recomputation (same agent as Chunk 4, own code, raw files only)
+All 176 runs, its numbers frozen before it opened the dataset: 4190 of 4224
+compared values identical, the other 34 the 6-digit rounding above (now
+fixed); every group mean and CI, the Spearman table, the reordering counts
+and the ss means identical; no pre-registered exclusion in either campaign;
+E1 on p in the feature round in 60 of 60; catch-up in 5 of 28 -b trials and
+0 of 28 fq; the 36 Chunk 4 rows and their 6 exclusions match its Chunk 4
+work. Traces match its own decode of the receiver pcaps.
+
+### Open for Mutahar (STATUS.md, question 1)
+The label is about zero on this setup, so a model trained on it will predict
+C_hat about 0 and the cost-aware controller will act like cooldown-only.
+Recommendation: before Chunk 6, one pilot campaign looking for the regime
+where damage exists (e.g. 50-100 Mbit/s links or larger delay gaps, where
+more packets are reordered than RACK absorbs), then Chunk 6.

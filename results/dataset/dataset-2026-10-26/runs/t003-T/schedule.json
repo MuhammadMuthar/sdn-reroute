@@ -1,0 +1,139 @@
+{
+ "scenario": "damage_moves",
+ "condition": "T",
+ "seed": 10003,
+ "duration": 27,
+ "hosts": {
+  "h1": "10.0.0.1",
+  "h2": "10.0.0.2",
+  "h3": "10.0.0.3",
+  "h4": "10.0.0.4",
+  "h5": "10.0.0.5",
+  "h6": "10.0.0.6",
+  "h7": "10.0.0.7",
+  "h8": "10.0.0.8"
+ },
+ "elephants": [
+  {
+   "id": "E1",
+   "src": "h1",
+   "dst": "h5",
+   "src_ip": "10.0.0.1",
+   "dst_ip": "10.0.0.5",
+   "sport": 40895,
+   "dport": 5201,
+   "start": 0.0836,
+   "duration": 27
+  },
+  {
+   "id": "E2",
+   "src": "h2",
+   "dst": "h6",
+   "src_ip": "10.0.0.2",
+   "dst_ip": "10.0.0.6",
+   "sport": 40208,
+   "dport": 5202,
+   "start": 0.1988,
+   "duration": 27
+  },
+  {
+   "id": "E3",
+   "src": "h3",
+   "dst": "h7",
+   "src_ip": "10.0.0.3",
+   "dst_ip": "10.0.0.7",
+   "sport": 40006,
+   "dport": 5203,
+   "start": 0.2235,
+   "duration": 27
+  },
+  {
+   "id": "E4",
+   "src": "h4",
+   "dst": "h8",
+   "src_ip": "10.0.0.4",
+   "dst_ip": "10.0.0.8",
+   "sport": 40432,
+   "dport": 5204,
+   "start": 0.1311,
+   "duration": 27
+  }
+ ],
+ "mice": [],
+ "pins": [
+  {
+   "flow": "E1",
+   "spine": 2
+  },
+  {
+   "flow": "E2",
+   "spine": 2
+  },
+  {
+   "flow": "E3",
+   "spine": 3
+  },
+  {
+   "flow": "E4",
+   "spine": 2
+  }
+ ],
+ "moves": [
+  {
+   "at": 11.745,
+   "flow": "E1",
+   "spine": 1
+  },
+  {
+   "at": 13.745,
+   "flow": "E1",
+   "spine": 2
+  }
+ ],
+ "tagged": [
+  "E1",
+  "E2",
+  "E3",
+  "E4"
+ ],
+ "snapshots": [
+  -2.0,
+  0.0,
+  2.0,
+  5.0,
+  10.0
+ ],
+ "ack_spine": null,
+ "snapshots_last_only": true,
+ "design": {
+  "trial": 3,
+  "arm": "T",
+  "moved": [
+   "E1"
+  ],
+  "pre": {
+   "E2": 2,
+   "E4": 2,
+   "E3": 3,
+   "E1": 1
+  },
+  "post": {
+   "E2": 2,
+   "E4": 2,
+   "E3": 3,
+   "E1": 2
+  },
+  "p": 1,
+  "q": 2,
+  "n_p": 0,
+  "n_q": 2,
+  "cap": null,
+  "mice": false,
+  "n_prev": 1,
+  "r": 2,
+  "delta": 2.0,
+  "t_move": 13.745,
+  "t_prev": 11.745
+ },
+ "sha256": "529ecf1e44a3be5a0ffc500269c2df6a089e493c5a8ac4f36e0129445b4c4087"
+}

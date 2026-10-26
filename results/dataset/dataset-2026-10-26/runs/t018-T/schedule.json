@@ -1,0 +1,140 @@
+{
+ "scenario": "damage_moves",
+ "condition": "T",
+ "seed": 10018,
+ "duration": 27,
+ "hosts": {
+  "h1": "10.0.0.1",
+  "h2": "10.0.0.2",
+  "h3": "10.0.0.3",
+  "h4": "10.0.0.4",
+  "h5": "10.0.0.5",
+  "h6": "10.0.0.6",
+  "h7": "10.0.0.7",
+  "h8": "10.0.0.8"
+ },
+ "elephants": [
+  {
+   "id": "E1",
+   "src": "h1",
+   "dst": "h5",
+   "src_ip": "10.0.0.1",
+   "dst_ip": "10.0.0.5",
+   "sport": 40539,
+   "dport": 5201,
+   "start": 0.1848,
+   "duration": 27,
+   "bitrate": "3M"
+  },
+  {
+   "id": "E2",
+   "src": "h2",
+   "dst": "h6",
+   "src_ip": "10.0.0.2",
+   "dst_ip": "10.0.0.6",
+   "sport": 40868,
+   "dport": 5202,
+   "start": 0.2734,
+   "duration": 27
+  },
+  {
+   "id": "E3",
+   "src": "h3",
+   "dst": "h7",
+   "src_ip": "10.0.0.3",
+   "dst_ip": "10.0.0.7",
+   "sport": 40221,
+   "dport": 5203,
+   "start": 0.3334,
+   "duration": 27
+  },
+  {
+   "id": "E4",
+   "src": "h4",
+   "dst": "h8",
+   "src_ip": "10.0.0.4",
+   "dst_ip": "10.0.0.8",
+   "sport": 40152,
+   "dport": 5204,
+   "start": 0.406,
+   "duration": 27
+  }
+ ],
+ "mice": [],
+ "pins": [
+  {
+   "flow": "E1",
+   "spine": 3
+  },
+  {
+   "flow": "E2",
+   "spine": 4
+  },
+  {
+   "flow": "E3",
+   "spine": 1
+  },
+  {
+   "flow": "E4",
+   "spine": 2
+  }
+ ],
+ "moves": [
+  {
+   "at": 2.357,
+   "flow": "E1",
+   "spine": 2
+  },
+  {
+   "at": 12.357,
+   "flow": "E1",
+   "spine": 1
+  }
+ ],
+ "tagged": [
+  "E1",
+  "E2",
+  "E3",
+  "E4"
+ ],
+ "snapshots": [
+  -2.0,
+  0.0,
+  2.0,
+  5.0,
+  10.0
+ ],
+ "ack_spine": null,
+ "snapshots_last_only": true,
+ "design": {
+  "trial": 18,
+  "arm": "T",
+  "moved": [
+   "E1"
+  ],
+  "pre": {
+   "E4": 2,
+   "E3": 1,
+   "E2": 4,
+   "E1": 2
+  },
+  "post": {
+   "E4": 2,
+   "E3": 1,
+   "E2": 4,
+   "E1": 1
+  },
+  "p": 2,
+  "q": 1,
+  "n_p": 1,
+  "n_q": 1,
+  "cap": "3M",
+  "mice": false,
+  "n_prev": 1,
+  "r": 3,
+  "delta": 10.0,
+  "t_move": 12.357,
+  "t_prev": 2.357
+ },
+ "sha256": "5e3463f909cfac3ae7b137b2187a7b6323f01022a93ec0445a93b8963c90fa82"
+}

@@ -55,6 +55,7 @@ DELTAS = (2.0, 5.0, 10.0)
 SNAPSHOTS = [-2.0, 0.0, 2.0, 5.0, 10.0]
 CONTROLLER = "ecmp_mon"
 SEED_BASE = 5000
+CAP_MODE = dict(mode="b")     # how E1's cap is applied: iperf3 -b (as run first) or fq
 
 
 def draw_trial(rng, p, q):
@@ -82,7 +83,7 @@ def arm_schedule(trial, k, seed, arm):
         s["mice"] = []
     for e in s["elephants"]:
         if e["id"] == "E1" and trial["cap"]:
-            e["bitrate"] = trial["cap"]
+            e["pacing" if CAP_MODE["mode"] == "fq" else "bitrate"] = trial["cap"]
     p, q = trial["p"], trial["q"]
     start = (trial["r"] if trial["n_prev"] else p) if arm == "T" else q
     s["condition"] = arm
@@ -99,6 +100,7 @@ def arm_schedule(trial, k, seed, arm):
     pre = dict(trial["competitors"], E1=p)
     post = dict(trial["competitors"], E1=q)
     s["design"] = dict(trial=k, arm=arm, moved=["E1"], pre=pre, post=post,
+                       cap_mode=CAP_MODE["mode"] if trial["cap"] else "",
                        **{x: trial[x] for x in ("p", "q", "n_p", "n_q", "cap", "mice", "n_prev",
                                                 "r", "delta", "t_move", "t_prev")})
     return s
@@ -111,8 +113,13 @@ def main():
     ap.add_argument("--first", type=int, default=0, help="first trial (pilots: a slice)")
     ap.add_argument("--count", type=int, default=0, help="number of trials, 0 = all")
     ap.add_argument("--only", default="", help="comma list of trial numbers (pilots)")
+    ap.add_argument("--capped-only", action="store_true", help="only the trials with a rate cap")
+    ap.add_argument("--cap-mode", choices=["b", "fq"], default="b",
+                    help="E1's rate cap: iperf3 -b (an average since the start, which catches "
+                    "up after a stall; the 2026-10-26 campaign) or --fq-rate (kernel pacing)")
     ap.add_argument("--out", required=True, help="jobs JSON to write")
     a = ap.parse_args()
+    CAP_MODE["mode"] = a.cap_mode
     rng = random.Random(a.seed)
     slots = [pq for pq in itertools.permutations(SPINES, 2) for _ in range(a.trials_per_pair)]
     trials = [draw_trial(rng, p, q) for p, q in slots]
@@ -122,6 +129,8 @@ def main():
         order = [k for k in order if a.first <= k < a.first + a.count]
     if a.only:
         order = [k for k in order if k in {int(x) for x in a.only.split(",")}]
+    if a.capped_only:
+        order = [k for k in order if trials[k]["cap"]]
     jobs = []
     for k in order:
         seed = SEED_BASE + a.seed * 1000 + k
