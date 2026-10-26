@@ -28,6 +28,11 @@ under sudo it runs on the system OVS with `mn -c` first):
       --conditions IC1,IR2,LC1,LR2,LR0 --runs 10 --seed 1 --out results/loaded/<name>
   python3 experiments/runner.py campaign --controllers ecmp,ecmp_mon,hedera,cooldown \\
       --scenario ecmp_mixed --runs 10 --seed 1 --out results/compare/<name>
+  python3 experiments/runner.py campaign \\
+      --controllers ecmp,hedera,cooldown,costaware_formula,costaware_ml \\
+      --scenario ecmp_mixed --runs 10 --seed 1 --out results/compare/<name>
+      (Chunk 6; the cost-aware apps load models/formula.json and
+      models/damage_model.joblib from analysis/damage_model.py)
   python3 experiments/runner.py replay --spec <jobs.json> --out results/damage/<name>
 Run r of a campaign uses seed + r - 1; with --conditions (and/or --controllers)
 every condition and controller of rep r uses that same seed (paired), in a

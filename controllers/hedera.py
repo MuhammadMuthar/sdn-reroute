@@ -98,6 +98,7 @@ class Flow:
 class HederaController(ECMPController):
     APP_NAME = "hedera"
     POLICY = "greedy"
+    POLICIES = ("none", "greedy", "cooldown")
     POLL_S = 1.0
     LINK_MBPS = 10.0
     ELEPHANT_MBPS = 1.0       # 10 % of the link rate (Hedera's threshold)
@@ -109,8 +110,8 @@ class HederaController(ECMPController):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.policy = os.environ.get("HEDERA_POLICY", self.POLICY)
-        if self.policy not in ("none", "greedy", "cooldown"):
-            raise ValueError("HEDERA_POLICY must be none, greedy or cooldown")
+        if self.policy not in self.POLICIES:
+            raise ValueError("HEDERA_POLICY must be one of %s" % (self.POLICIES,))
         self.flows = {}           # key -> Flow
         self.stats = {}           # xid -> [parts], for multipart replies
         self.waiting = {}         # xid -> hub.Event
@@ -310,6 +311,17 @@ class HederaController(ECMPController):
             del self.flows[key]
 
     # ---- policy --------------------------------------------------------------
+    def _rule(self, feat):
+        """(go, why) for one candidate move; feat is its pre-move feature record.
+        Subclasses with another rule (controllers/costaware.py) override this."""
+        gain, since = feat["gain_mbps"], feat["since_last_move_s"]
+        if self.policy == "greedy":
+            return gain > 0, "gain>0"
+        cool = since is None or since >= self.COOLDOWN_S
+        why = ("gain>margin" if gain > self.MARGIN_MBPS else "gain<=margin") + \
+              ("" if cool else ",cooling")
+        return gain > self.MARGIN_MBPS and cool, why
+
     def _decide(self, now):
         moves = []
         if self.policy == "none":
@@ -326,25 +338,20 @@ class HederaController(ECMPController):
             q = min(others, key=lambda k: (u[k], k))
             gain = u[p] - (u[q] + fl.rate)
             since = None if fl.t_last_move is None else now - fl.t_last_move
-            if self.policy == "greedy":
-                go, why = gain > 0, "gain>0"
-            else:
-                cool = since is None or since >= self.COOLDOWN_S
-                go = gain > self.MARGIN_MBPS and cool
-                why = ("gain>margin" if gain > self.MARGIN_MBPS else "gain<=margin") + \
-                      ("" if cool else ",cooling")
-            if not go:
-                continue
             n_p = sum(1 for g in cands if g.leaf == fl.leaf and g.path == p)
             n_q = sum(1 for g in cands if g.leaf == fl.leaf and g.path == q)
             feat = dict(round=self.round, t=now, flow=fl.f, leaf=fl.leaf, from_spine=p,
                         to_spine=q, rate_mbps=fl.rate, U_before={str(k): u[k] for k in sorted(u)},
-                        U_p=u[p], U_q=u[q], gain_mbps=gain, why=why,
+                        U_p=u[p], U_q=u[q], gain_mbps=gain,
                         elephants_on_p=n_p, elephants_on_q=n_q, age_s=now - fl.t_syn,
                         bytes_so_far=fl.bytes, n_prev_moves=fl.n_moves,
                         since_last_move_s=since, path_src=fl.path_src,
                         delay_ms_p_config=DEFAULT_SPINE_DELAY_MS[p - 1],
                         delay_ms_q_config=DEFAULT_SPINE_DELAY_MS[q - 1])
+            go, why = self._rule(feat)
+            feat["why"] = why
+            if not go:
+                continue
             rep = self.set_path(fl.f, q, modify=fl.pinned is not None, origin="policy",
                                 extra=dict(round=self.round, from_spine=p))
             feat["reply"] = rep

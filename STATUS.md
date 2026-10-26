@@ -1,9 +1,28 @@
 # STATUS (rewritten at the end of every session)
 
-Last session: Chunk 3, ECMP baseline and the reusable runner, laptop,
-2026-10-19. Finish line met. Two findings change how the project measures
-damage: an emulation artifact (TCP Small Queues) and the sign of the cost of
-moving onto a loaded path. Next: Chunk 4.
+Last session: Chunks 5-6 code prep, cloud, 2026-10-26 (no Mininet). Code only,
+no new results: the damage-model training script, the two cost-aware
+controllers and a Stage 2 report skeleton exist and pass offline tests. The
+Chunk 3 state below is unchanged; Chunk 4 is running on the laptop.
+
+## Chunks 5-6 code (cloud, 2026-10-26)
+
+- `analysis/damage_dataset.py` (PR #7): Chunk 5 dataset builder.
+- `analysis/damage_model.py`: leave-one-seed-out evaluation of mean /
+  formula / decision tree / gradient boosting on dest_total_deficit_W10 (and
+  the moved and bystander terms), MAE with 95 % CI, decision agreement, and
+  decision time per flow; saves models/formula.json and
+  models/damage_model.joblib for the controllers. `--synthetic N` exercises it
+  without data (marked SYNTHETIC, never writes models/).
+- `controllers/costaware.py` (+ `costaware_formula.py`, `costaware_ml.py`):
+  hedera.py with the rule from controllers/cost.py swapped in through a new
+  `_rule` hook; greedy and cooldown decisions are unchanged (tested). Logs
+  gain/cost bytes and decision time per move, and held-back moves per round.
+  Fails at start if its model file is missing. Runner: `--controllers
+  ecmp,hedera,cooldown,costaware_formula,costaware_ml`.
+- `docs/stage2_report.md`: report skeleton (due 2026-11-15) with the Chunk 2-3
+  numbers and TODOs naming the script that fills each gap.
+- Tests: `python3 -m pytest tests` (16 pass; needs os-ken and sklearn).
 
 ## What works
 
@@ -73,6 +92,13 @@ with its own code: all confirmed (LOG.md).
    coordinator on delegated authority, on this thread's recommendation.
 
 ## Next
+
+After Chunk 4: Chunk 5 (`experiments/replay.py` + `runner.py replay` over the
+moves, then `analysis/damage_dataset.py`), Chunk 6 (`analysis/damage_model.py
+--data ...`, then the 5-way campaign). Not tested yet: the cost-aware
+controllers on real switches (first laptop run should be a one-seed pilot).
+
+Chunk 4 notes (unchanged):
 
 Chunk 4 (CHUNKS.md B): Hedera-style + cooldown-only controllers as
 FabricController apps, ECMP vs Hedera vs cooldown-only, 10 paired seeds on
