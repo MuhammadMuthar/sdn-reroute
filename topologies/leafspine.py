@@ -69,10 +69,15 @@ class LeafSpineTopo(Topo):
 
 
 def shape_cmds(intf, mbps, queue):
+    # above 16 Mbit/s HTB's default quantum (rate / r2q) exceeds 200000 bytes and tc
+    # warns (the kernel clamps it); set the clamped value so the warning goes away.
+    # One class per qdisc, so the quantum does not change who is served; at 10
+    # Mbit/s the commands are exactly the earlier chunks' ones.
+    q = " quantum 200000" if mbps * 1e6 / 8 / 10 > 200000 else ""
     return ["tc qdisc del dev %s root" % intf,
             "tc qdisc add dev %s root handle 5: htb default 1" % intf,
-            "tc class add dev %s parent 5: classid 5:1 htb rate %gmbit burst %s cburst %s"
-            % (intf, mbps, HTB_BURST, HTB_BURST),
+            "tc class add dev %s parent 5: classid 5:1 htb rate %gmbit burst %s cburst %s%s"
+            % (intf, mbps, HTB_BURST, HTB_BURST, q),
             "tc qdisc add dev %s parent 5:1 handle 10: pfifo limit %d" % (intf, queue)]
 
 
@@ -139,7 +144,10 @@ def start_net(net, mbps=10, queue=20, spine_delay_ms=DEFAULT_SPINE_DELAY_MS,
               host_qdisc="default"):
     net.start()
     disable_offloads(net)
-    tc = configure_links(net, mbps=mbps, queue=queue, spine_delay_ms=spine_delay_ms)
+    # the spine netem holds rate x delay in flight (83 packets at 100 Mbit/s and
+    # 10 ms): its limit scales with the rate, 100 packets at 10 Mbit/s as before
+    tc = configure_links(net, mbps=mbps, queue=queue, spine_delay_ms=spine_delay_ms,
+                         netem_limit=max(100, int(round(10 * mbps))))
     if host_qdisc == "netem":
         for h in net.hosts:
             c = "tc qdisc replace dev %s-eth0 root %s" % (h.name, HOST_EGRESS_NETEM)

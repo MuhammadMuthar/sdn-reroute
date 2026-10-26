@@ -106,6 +106,19 @@ def arm_schedule(trial, k, seed, arm):
     return s
 
 
+def grid_trial(rng, p, q, n_p, n_q):
+    """A fixed-factor trial (--grid): no cap, no mice, no previous move."""
+    t = draw_trial(rng, p, q)
+    others = [s for s in SPINES if s not in (p, q)]
+    comp = ["E2", "E3", "E4"]
+    rng.shuffle(comp)
+    place = {f: p if i < n_p else q if i < n_p + n_q else rng.choice(others)
+             for i, f in enumerate(comp)}
+    t.update(n_p=n_p, n_q=n_q, cap=None, mice=False, n_prev=0, r=None, delta=None,
+             t_prev=None, competitors=place)
+    return t
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--trials-per-pair", type=int, default=5)
@@ -117,12 +130,22 @@ def main():
     ap.add_argument("--cap-mode", choices=["b", "fq"], default="b",
                     help="E1's rate cap: iperf3 -b (an average since the start, which catches "
                     "up after a stall; the 2026-10-26 campaign) or --fq-rate (kernel pacing)")
+    ap.add_argument("--grid", default="", help="fixed factors instead of the random draw: "
+                    "'p>q,...;n_p,...;n_q,...;reps', e.g. '4>1,3>1,1>4,1>2;1;0,1;2' (the damage-"
+                    "regime pilot); uncapped, no mice, no previous move")
     ap.add_argument("--out", required=True, help="jobs JSON to write")
     a = ap.parse_args()
     CAP_MODE["mode"] = a.cap_mode
     rng = random.Random(a.seed)
-    slots = [pq for pq in itertools.permutations(SPINES, 2) for _ in range(a.trials_per_pair)]
-    trials = [draw_trial(rng, p, q) for p, q in slots]
+    if a.grid:
+        pairs, nps, nqs, reps = a.grid.split(";")
+        pairs = [tuple(int(x) for x in pq.split(">")) for pq in pairs.split(",")]
+        trials = [grid_trial(rng, p, q, int(n_p), int(n_q)) for p, q in pairs
+                  for n_p in nps.split(",") for n_q in nqs.split(",") for _ in range(int(reps))]
+    else:
+        slots = [pq for pq in itertools.permutations(SPINES, 2)
+                 for _ in range(a.trials_per_pair)]
+        trials = [draw_trial(rng, p, q) for p, q in slots]
     order = list(range(len(trials)))
     rng.shuffle(order)                            # run order of the trials
     if a.count:

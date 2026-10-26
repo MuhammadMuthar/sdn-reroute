@@ -1328,3 +1328,32 @@ asked for nothing to be left open from Chunk 3; it is dropped as not needed,
 because Chunk 2's root cross-check (results/gate/sudo-check-2026-10-19)
 already showed rootless and real-root runs agree, and every chunk since used
 the same rootless setup. The script stays in scripts/ if a reviewer asks.
+
+## 2026-10-26 Damage-regime pilot at 100 Mbit/s (before Chunk 6)
+
+Mutahar chose the recommendation (21:21 UTC): one pilot looking for the regime
+where reroutes cause damage, then Chunk 6. Exploratory, kept lean (no
+independent recomputation unless the result changes Chunk 6's design).
+
+### Plan (written before the pilot ran)
+- `damage_design.py --seed 7 --grid "4>1,3>1,1>4,1>2;1;0,1;2"`: 16 trials =
+  s4 -> s1 and s3 -> s1 (slow -> fast, gaps 9 and 4 ms), s1 -> s4 (fast ->
+  slow, 9 ms), s1 -> s2 (same delay); one other elephant on the source; 0 or
+  1 on the destination; 2 reps; no cap, no mice, no previous move. Links 100
+  Mbit/s, leaf queues 200 packets (10x the 10 Mbit/s setup), monitor-only
+  controller, Chunk 5's labels and checks; `runner.py replay --mbps 100
+  --queue 200 --out results/dataset/regime-2026-10-26`.
+- Compared, descriptively, with the Chunk 5 trials at 10 Mbit/s of the same
+  pairs and destination loads.
+- Decision rule for Chunk 6 (stated now): if slow -> fast moves at 100 Mbit/s
+  have a destination-path deficit (W2 or W10) with a CI above zero and of at
+  least about 1 % of the link rate, Chunk 6 builds its dataset and comparison
+  at 100 Mbit/s; otherwise damage is negligible at both rates and Chunk 6 runs
+  as planned, saying so.
+- Code: topologies/leafspine.py sets HTB's quantum (tc warned and the setup
+  failed at 100 Mbit/s) and scales the spine netem limit with the rate (1000
+  packets at 100 Mbit/s); both only above 16 Mbit/s, the 10 Mbit/s commands
+  are unchanged. damage_design.py `--grid`.
+- Feasibility (results/dataset/dev-regime, 1 trial, not committed): an
+  elephant alone reaches 95.5 Mbit/s, no capture drops, runs 87-91 s; the
+  slow -> fast move's socket saw 109 reorderings in W2 (about 2 at 10 Mbit/s).
