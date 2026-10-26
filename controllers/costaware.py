@@ -64,7 +64,7 @@ class CostAwareController(HederaController):
         self.held = []
         super().__init__(*args, **kwargs)
         self._log(dict(kind="estimator", horizon_s=cost.HORIZON_S, t_cool_s=cost.T_COOL_S,
-                       **self.estimator.describe()))
+                       estimator=self.estimator.describe()))   # nested: a model's own keys include 'kind'
 
     def _rule(self, feat):
         go, why, det = cost.decide_move(feat, self.estimator, link_mbps=self.LINK_MBPS)

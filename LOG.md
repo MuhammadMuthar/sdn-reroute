@@ -1377,3 +1377,36 @@ still loses nothing measurable, except a fast -> slow move onto an empty path,
 where the moved flow ramps up to the longer path (1-2 % over 10 s, n = 2).
 By the pre-stated rule Chunk 6 runs as planned; the fast -> slow ramp is the
 only damage found and is reported. Not independently recomputed (pilot).
+
+## 2026-10-26 Chunk 6: model and cost-aware controllers (lean, usage is tight)
+
+- `damage_model.py --data results/dataset/dataset-2026-10-26/dataset/dataset.csv
+  --out results/model/model-2026-10-26 --models models --fig`: 90 rows, 13
+  groups, GroupKFold(10). Destination-path total at W10, MAE: mean 29.0 ±
+  12.2 kB, formula 29.9, tree 30.5, gbr 31.4: no estimator beats predicting
+  the mean, as the near-zero label predicts. Decision time per flow: formula
+  0.002 ms, gbr 0.19 ms median.
+- 5-way comparison, lean: only costaware_formula and costaware_ml are run
+  (`runner.py campaign --controllers costaware_formula,costaware_ml
+  --scenario ecmp_mixed --runs 10 --seed 1 --out results/compare/costaware-2026-10-26`);
+  ECMP, Hedera-style and cooldown-only are Chunk 4's runs of the same seeds on
+  the same boot (be9af6df), so ECMP placement per seed is identical. Since
+  Chunk 4, hedera.py only gained the runner-pin tracking, which these runs
+  never reach.
+- First attempt: all 10 ML runs failed at start (costaware.py logged the
+  estimator description with `**`, and a saved model's info has its own
+  `kind` key: TypeError). Fixed (nested under `estimator`), the 10 ML runs
+  rerun on the same seeds; the formula runs were not touched.
+- Result (results/compare/five-way-2026-10-26/chunk6_summary.md,
+  analysis/chunk6.py), mean ± 95 % CI, ECMP / Hedera-style / cooldown-only /
+  cost-aware formula / cost-aware ML: elephant goodput 5.94 / 8.54 / 8.49 /
+  8.48 ± 0.19 / 8.35 ± 0.22 Mbit/s; mice FCT p50 50.5 / 63.3 / 63.4 / 63.3 /
+  63.0 ms; reroutes per minute 0 / 3.8 / 4.8 / 5.2 / 7.6; flaps per minute 0
+  / 0 / 0.2 / 0.4 / 0.4. Paired: formula minus Hedera-style goodput -0.05
+  [-0.23, 0.13], ML minus Hedera-style -0.18 [-0.39, 0.02] Mbit/s; both keep
+  the gain over ECMP (+2.54 [1.61, 3.47] and +2.41 [1.56, 3.27]).
+- Reading: with a damage label near zero the cost models cannot hold moves
+  back, so both cost-aware controllers behave like the cooldown baseline;
+  none is better or worse than Hedera-style on this workload. Finish line
+  met (five controllers through one runner, a first 5-way comparison).
+  Not independently recomputed (usage).

@@ -95,6 +95,13 @@ an empty path cost something (the flow ramps to the larger BDP: 6-12 % of the
 link in W2, 1-2 % over W10, n = 2). By the pre-stated rule Chunk 6 runs as
 planned (10 Mbit/s).
 
+Chunk 6 (results/compare/five-way-2026-10-26/chunk6_summary.md): no damage
+model beats predicting the mean (MAE about 29 kB per move at W10); both
+cost-aware controllers keep Hedera-style's gain over ECMP (+2.5 Mbit/s) and
+do not differ from Hedera-style or cooldown-only (formula minus Hedera-style
+-0.05 [-0.23, 0.13] Mbit/s). Five controllers run through one runner. Not
+independently recomputed yet.
+
 ## Open questions for Mutahar
 
 1. (Pilot done, see above; Chunk 6 as planned unless you prefer 100 Mbit/s.) The damage label is about zero on this setup (10 Mbit/s, 1-10 ms paths,
