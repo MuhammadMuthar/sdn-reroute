@@ -258,7 +258,8 @@ def run(a):
             meta["elephant_start"][e["id"]] = time.time()
             clients.append(H[e["src"]].popen(
                 ["iperf3", "-c", e["dst_ip"], "-p", str(e["dport"]), "-t", str(e["duration"]),
-                 "--cport", str(e["sport"]), "-J", "-i", "0.1"],
+                 "--cport", str(e["sport"]), "-J", "-i", "0.1"] +
+                (["-b", str(e["bitrate"])] if e.get("bitrate") else []),   # e.g. "3M" (Chunk 5)
                 stdout=open(os.path.join(rd, "iperf_client_%s.json" % e["id"]), "w"),
                 stderr=subprocess.STDOUT))
         step("elephants started")
@@ -269,7 +270,11 @@ def run(a):
         for mv in sched["moves"]:
             batches.setdefault(mv["at"], []).append(mv)
         for i, at in enumerate(sorted(batches)):
-            for off in sorted(o for o in sched["snapshots"] if o < 0):
+            # "snapshots_last_only" (Chunk 5): an earlier batch gets only its
+            # pre/post0 snapshots, so its +10 s snapshot cannot delay the next batch
+            offs = sched["snapshots"] if (i == len(batches) - 1 or
+                                          not sched.get("snapshots_last_only")) else []
+            for off in sorted(o for o in offs if o < 0):
                 time.sleep(max(0.0, t0 + at + off - time.time()))
                 snap("m%d_%+g" % (i, off))
             time.sleep(max(0.0, t0 + at - time.time()))
@@ -285,7 +290,7 @@ def run(a):
                 step("moved %s -> s%d" % (mv["flow"], mv["spine"]))
             tb = tb or time.time()
             snap("m%d_post0" % i)                # counter windows can start here
-            for off in sorted(o for o in sched["snapshots"] if o > 0):
+            for off in sorted(o for o in offs if o > 0):
                 time.sleep(max(0.0, tb + off - time.time()))
                 snap("m%d_%+g" % (i, off))
         for c in clients:

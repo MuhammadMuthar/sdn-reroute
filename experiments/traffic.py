@@ -47,6 +47,20 @@ SCENARIOS = {
                   size=dict(dist="bounded_pareto", alpha=1.2, lo=2000, hi=1000000)),
         pins=[], moves=[], tagged=[], snapshots=[],
     ),
+    # Chunk 5: the traffic of one deliberate-reroute trial. E1 (h1 -> h5) is the
+    # flow that experiments/damage_design.py moves; E2..E4 are placed by pins;
+    # mice come from h2..h4 only, so h1's counters stay E1's own. The design
+    # sets pins, moves, tagged flows, snapshots, a rate cap and drops the mice
+    # in half of the trials.
+    "damage_moves": dict(
+        hosts_per_leaf=4, duration=27,
+        elephants=dict(pairs=[[1, 5], [2, 6], [3, 7], [4, 8]], start_jitter=0.5,
+                       cport_range=[40001, 40999]),
+        mice=dict(srcs=[2, 3, 4], dsts=[5, 6, 7, 8], rate_per_src=10.0,
+                  t_start=2.0, t_end=25.0, sport_range=[20000, 39999],
+                  size=dict(dist="bounded_pareto", alpha=1.2, lo=2000, hi=1000000)),
+        pins=[], moves=[], tagged=[], snapshots=[],
+    ),
     "loaded_move": dict(
         hosts_per_leaf=4, duration=25,
         elephants=dict(pairs=[[1, 5], [2, 6]], ids=["E0", "B"], start_jitter=0.0,

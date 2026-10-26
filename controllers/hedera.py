@@ -175,6 +175,30 @@ class HederaController(ECMPController):
         self._flow(dp, PRIO_COUNT, self._match5(parser, f), [parser.OFPActionGroup(GROUP_ID)],
                    cookie=COOKIE_LEAF, idle_timeout=self.COUNT_IDLE_S)
 
+    def set_path(self, f, spine, modify, origin="runner", extra=None):
+        rep = super().set_path(f, spine, modify, origin=origin, extra=extra)
+        if origin == "runner" and rep.get("ok"):
+            self._track_runner_pin(f, int(spine))
+        return rep
+
+    def _track_runner_pin(self, f, spine):
+        """A pin or move from the experiment runner (Chunk 5's deliberate
+        moves). A flow pinned before it starts never reaches the SYN-copy
+        rule (the prio-200 pin matches first), so the monitor registers it
+        here, with the pin as its path; its rate then comes from the pin's
+        counter like any moved flow's. Runs without runner pins (Chunk 4's
+        live campaigns) never get here."""
+        key = (f["src"], f["dst"], int(f["sport"]), int(f["dport"]))
+        fl = self.flows.get(key)
+        if fl is None:
+            src, dst = self.by_ip.get(f["src"]), self.by_ip.get(f["dst"])
+            if src is None or dst is None or src["leaf"] == dst["leaf"]:
+                return
+            fl = self.flows[key] = Flow(key, dict(src=f["src"], dst=f["dst"], sport=int(f["sport"]),
+                                                  dport=int(f["dport"])),
+                                        src["leaf"], dst["leaf"], time.time())
+        fl.pinned, fl.path, fl.path_src = spine, spine, "pin"
+
     def _install_spine_rules(self, fl):
         for k, dpid in self.lay["spine_dpid"].items():
             dp = self.dps.get(dpid)

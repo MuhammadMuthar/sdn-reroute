@@ -1116,3 +1116,88 @@ stays as it is for Chunks 5-6, the artifact is reported as a methods result
 next to TSQ, and damage is measured per flow and in replays. Chunk 4 is not
 rerun. A direct check of the mechanism with OVS's upcall counters stays on
 the list (not done yet).
+
+## 2026-10-26 Chunk 5: damage dataset (laptop)
+
+Same Remote Control session and boot as Chunk 4 part 4 (be9af6df), started
+on Mutahar's "continue". Plan: CHUNKS.md section B, Chunk 5.
+
+### Why a design campaign
+Chunk 4's controller moves are all alike (first 3 s, from a shared uplink to
+an empty one), so they cannot show what damage depends on. Chunk 5 makes the
+moves itself, varying what CHUNKS.md lists, and keeps Chunk 4's 25 events as
+an extra group of real controller decisions.
+
+### Code (before any campaign run)
+- `experiments/damage_design.py`: a seeded design (docstring). A trial moves
+  E1 (h1 -> h5) from spine p to q at t_move in [12, 14] s; T = move arm (E1
+  pinned to p, or to r and moved r -> p delta s earlier), C = matched no-move
+  arm (E1 pinned to q, sham flow-mods at the same times). E2..E4 pinned the
+  same in both arms: n_p on p, n_q on q, the rest on the two other spines.
+  Writes the runner's replay spec (jobs.json) and design.csv.
+- `experiments/traffic.py`: scenario `damage_moves` (27 s, 4 elephants, mice
+  only from h2..h4 so h1's nstat counters are E1's own).
+- `experiments/runner.py`: `bitrate` per elephant (iperf3 -b) and
+  `snapshots_last_only` (an earlier move's +10 s snapshot no longer delays
+  the next move). Both optional; no earlier scenario uses them.
+- `controllers/hedera.py`: the monitor registers flows the runner pins (a
+  pinned flow's SYN never reaches the SYN-copy rule, so the monitor never saw
+  it); only runs with runner pins under a monitoring controller reach this,
+  i.e. none before Chunk 5 (test_runner_pins_are_tracked).
+- `analysis/damage_dataset.py`: design mode (rows, labels, features, ss,
+  nstat, exclusions), the Chunk 4 rows with the closing-RST fix, summary,
+  correlation table, two figures. Pilot results/dataset/dev-pilot1 (trials 6
+  and 9, 4 runs, not committed): runs 61-67 s; the monitor saw E1 on its
+  source spine in both trials; elephants on p / q as designed; E1's 3 Mbit/s
+  cap gave 3.4 Mbit/s; arms' move times 1-3 ms apart; h1's nstat
+  retransmissions equal E1's socket's (+8, +5). Pilot numbers are not
+  results.
+
+### Pre-registered plan (written before the campaign)
+- Campaign: `damage_design.py --trials-per-pair 5 --seed 5` = 60 trials
+  (each of the 12 ordered spine pairs 5 times, delay gaps -9 .. +9 ms), 120
+  runs, seeds 10000-10059, run order and arm order shuffled; `runner.py
+  replay --spec ... --out results/dataset/dataset-2026-10-26`; controller
+  ecmp_mon in both arms; host_qdisc netem; one boot.
+- Factors per trial: (p, q); n_p, n_q uniform over the 8 pairs with n_p +
+  n_q <= 3; E1 cap none / 6 / 3 Mbit/s (1/2, 1/4, 1/4); mice from h2..h4 on
+  or off (1/2); a previous move with probability 0.4 (r uniform among the
+  spines other than p, r = q is a flap; delta 2, 5 or 10 s). The draw gave 28
+  trials with a previous move (13 flaps), 30 with mice, caps 32 / 17 / 11.
+- Labels: goodput G from the receiver traces (packets with an ACK), windows
+  from each arm's own barrier reply of the move or sham: W2, W5, W10;
+  deficits C - T in bytes: moved (E1), bystanders (elephants on q), the
+  destination-path total (the damage number, Chunk 6 target at W10), left
+  behind (elephants on p), all four; the 2 s before the move (C - T, differs
+  by construction); E1's own socket (ss: retransmissions, reord_seen,
+  dsack_dups) over W2 and W10 in each arm; h1's nstat T - C over W2 and W10.
+- Features: the controller's view rebuilt from the move arm's monitor round
+  at or before the move, with hedera._decide's definitions (rate, U_p, U_q,
+  gain, elephants on p / q, bytes so far; age from the scheduled start;
+  previous moves and time since the last from the design; configured
+  delays) plus cost.derive; [host] cwnd / unacked / rtt and cwnd asymmetry
+  from the move arm's ss log, analysis only.
+- Exclusions (decided now): a run error or a missing arm; uplink captures not
+  showing every elephant on its intended spines (T: E1 on {start, p, q},
+  others on their spine; C: every elephant on its no-move spine); an
+  elephant whose first packet reaches its receiver later than 5 s before the
+  move in either arm. Chunk 4 rows: the Chunk 4 sensitivity rules (a moved
+  flow or bystander more than 0.5 s late in either arm; W10 past the end of
+  the elephants), which remove 6 of its 36 rows. Excluded rows stay in
+  dataset.csv with replay_ok = 0 and the reason; no trial is rerun to
+  replace one.
+- Groups: the spine pair for design rows (12 groups), "chunk4" for the
+  controller moves; scenario = direction | elephants on the destination.
+- Finish line outputs: dataset.csv, data_dictionary.md, correlations.csv
+  (Spearman r of every controller, derived and host feature with the
+  destination-path total at W10 and W2, the moved term at W10 and the
+  bystander term at W10; design rows, and all rows), summary.md (means ± 95 %
+  CI by direction, n_q, previous move, flap, mice), figures/
+  damage_correlations.png and damage_vs_features.png, the row count.
+- Expectations from Chunks 2-4, stated now and checked descriptively (no
+  test): (1) the moved term at W2 is larger for slow->fast moves (gap < 0)
+  than for the others (reordering, spurious retransmissions); (2) with
+  elephants on the destination the moved term is lower and the bystander
+  term positive, so the total is nearer zero than the moved term; (3) the
+  destination-path total is small, mean |W10| < 0.5 Mbit/s overall; (4) E1's
+  socket sees a reordering in W2 in most slow->fast moves and few others.

@@ -83,6 +83,23 @@ class TestDecide(unittest.TestCase):
         self.assertEqual(recs[0]["kind"], "held")
         self.assertEqual(recs[0]["held"][0]["why"], "gain<=cost")
 
+    def test_runner_pins_are_tracked(self):
+        """A flow the runner pins before it starts is registered with the pin as
+        its path, and a later runner move updates it; the policy's own state of
+        other flows is untouched."""
+        c = ctl(HederaController, "none")
+        c.by_ip = {"10.0.0.2": dict(leaf=1), "10.0.0.6": dict(leaf=2),
+                   "10.0.0.3": dict(leaf=1)}
+        f = dict(src="10.0.0.2", dst="10.0.0.6", sport=40123, dport=5202)
+        c._track_runner_pin(f, 3)
+        fl = c.flows[("10.0.0.2", "10.0.0.6", 40123, 5202)]
+        self.assertEqual((fl.leaf, fl.dleaf, fl.pinned, fl.path, fl.path_src), (1, 2, 3, 3, "pin"))
+        c._track_runner_pin(dict(f, sport="40123"), 1)
+        self.assertEqual(fl.pinned, 1)
+        self.assertEqual(len(c.flows), 3)
+        c._track_runner_pin(dict(src="10.0.0.2", dst="10.0.0.3", sport=1, dport=2), 2)
+        self.assertEqual(len(c.flows), 3)          # same leaf: not a fabric path
+
     def test_missing_model_fails_loudly(self):
         with self.assertRaises(FileNotFoundError):
             make_estimator("model", "/nonexistent/damage_model.joblib")
