@@ -1107,3 +1107,12 @@ start-up; 5 of the 7 non-elephant moves came after the mouse had finished.
   (`ovs-appctl dpctl/show` lookups missed, ECMP vs monitor-only, two runs).
 - Chunk 5 should produce reroutes in steady state and onto loaded paths; on
   ecmp_mixed the controllers only move at flow start onto empty uplinks.
+
+### Decision: keep the Hedera-style monitoring for Chunks 5-6 (16:11 UTC)
+Mutahar answered the open question with "continue" (project thread, 16:11
+UTC), which the project coordinator relayed as accepting this thread's
+recommendation: the monitoring (SYN copy, per-flow counting rules, 1 s stats)
+stays as it is for Chunks 5-6, the artifact is reported as a methods result
+next to TSQ, and damage is measured per flow and in replays. Chunk 4 is not
+rerun. A direct check of the mechanism with OVS's upcall counters stays on
+the list (not done yet).

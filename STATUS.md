@@ -93,7 +93,9 @@ Earlier chunks (unchanged): ECMP baseline 6.16 ± 0.93 Mbit/s mean goodput
 
 ## Decisions made this session
 
-None that change the plan. Post hoc additions are labelled in the summary
+Keep the Hedera-style monitoring as it is for Chunks 5-6 (Mutahar,
+"continue" on the recommendation below, 16:11 UTC); Chunk 4 is not rerun.
+Otherwise none that change the plan. Post hoc additions are labelled in the summary
 (per-socket W2 counters, event timing, mice_reorder.py); three bugs fixed
 after reading results (closing-RST ACKs in chunk4.py, NaN percentiles for
 failed mice in metrics.py, TIME_WAIT packets in mice_reorder.py), none of
@@ -116,7 +118,7 @@ from Chunk 4 for its design:
 
 ## Open questions for Mutahar
 
-1. The monitoring artifact: keep the Hedera-style monitoring as is for
+1. (Decided: keep it.) The monitoring artifact: keep the Hedera-style monitoring as is for
    Chunks 5-6 (all dynamic controllers share it, damage is measured per flow
    and in replays without it), or change it so the counting rule cannot race
    a flow's first packets (e.g. release the SYN only after the rule is in,
