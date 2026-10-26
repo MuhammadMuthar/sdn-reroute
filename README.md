@@ -117,6 +117,29 @@ Queues then caps every flow at a few packets there, so congestion control
 never engages. `python3 experiments/tsq_check.py --out results/tsq/<name>`
 shows the difference; LOG.md (Chunk 3) has the explanation.
 
+## Controller comparison and reroute damage (Chunks 4-6)
+
+Each chunk reruns from one script (rootless, same boot for all of it, because
+ECMP's hash is seeded at boot); every figure comes from these commands.
+
+```bash
+./scripts/chunk4_campaigns.sh   # ECMP / monitor-only / Hedera-style / cooldown-only, 10 seeds,
+                                # plus matched move / no-move replays of every reroute (about 2 h)
+./scripts/chunk5_campaign.sh    # 60 deliberate reroutes (move / no-move pairs) -> damage dataset (about 3 h)
+.venv/bin/python analysis/damage_model.py --data results/dataset/<name>/dataset/dataset.csv \
+    --out results/model/<name> --models models          # Chunk 6 models
+python3 experiments/runner.py campaign --controllers costaware_formula,costaware_ml \
+    --scenario ecmp_mixed --runs 10 --seed 1 --out results/compare/costaware-<name>
+.venv/bin/python analysis/chunk6.py --chunk4 results/compare/compare-<name> \
+    --costaware results/compare/costaware-<name> --out results/compare/five-way-<name>
+```
+
+Paper figures: `figures/chunk4_comparison.png` (four controllers),
+`figures/chunk4_damage.png` and `chunk4_tradeoff.png` (damage per reroute),
+`figures/damage_correlations.png` and `damage_vs_features.png` (Chunk 5
+dataset), `figures/chunk6_comparison.png` (five controllers). Results and
+their caveats are in STATUS.md; the full record is LOG.md.
+
 ## Layout
 
 ```
