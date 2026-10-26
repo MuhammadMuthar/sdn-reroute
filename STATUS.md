@@ -99,8 +99,8 @@ Chunk 6 (results/compare/five-way-2026-10-26/chunk6_summary.md): no damage
 model beats predicting the mean (MAE about 29 kB per move at W10); both
 cost-aware controllers keep Hedera-style's gain over ECMP (+2.5 Mbit/s) and
 do not differ from Hedera-style or cooldown-only (formula minus Hedera-style
--0.05 [-0.23, 0.13] Mbit/s). Five controllers run through one runner. Not
-independently recomputed yet.
+-0.05 [-0.23, 0.13] Mbit/s). Five controllers run through one runner.
+Headline numbers independently recomputed: all confirmed.
 
 ## Open questions for Mutahar
 

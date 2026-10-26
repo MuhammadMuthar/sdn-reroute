@@ -1410,3 +1410,8 @@ only damage found and is reported. Not independently recomputed (pilot).
   none is better or worse than Hedera-style on this workload. Finish line
   met (five controllers through one runner, a first 5-way comparison).
   Not independently recomputed (usage).
+- Independent recomputation of the Chunk 6 headline numbers (separate agent,
+  own code, raw iperf3 JSON, mice CSVs and controller events, 50 runs): every
+  per-controller goodput, FCT p50 and reroutes-per-minute mean and CI, and the
+  four paired goodput contrasts, match chunk6_summary.md to the printed
+  precision; no run had an error, no mouse failed.
