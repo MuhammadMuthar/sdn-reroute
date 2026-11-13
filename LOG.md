@@ -1415,3 +1415,18 @@ only damage found and is reported. Not independently recomputed (pilot).
   per-controller goodput, FCT p50 and reroutes-per-minute mean and CI, and the
   four paired goodput contrasts, match chunk6_summary.md to the printed
   precision; no run had an error, no mouse failed.
+
+## 2026-11-13: Stage 2 milestone report
+
+Wrote the Stage 2 report from the Chunk 3-6 results; no new experiment was
+run. `analysis/stage2_report.py` recomputes Table 1, the paired differences,
+the 60-reroute damage numbers and the model errors from the raw run files
+(all match STATUS.md) and draws `figures/stage2_results.png`;
+`docs/build_stage2_pdf.py` builds the 2-page PDF. The report states the
+Chunk 6 outcome as it is: the cost-aware controllers keep the gain over ECMP
+but do not beat Hedera-style rerouting at 10 Mbit/s, because there is almost
+no damage to predict. One correction while writing: monitoring raises
+reordering events on short flows but does not raise their median completion
+time (monitor-only minus ECMP: -0.96 ms), so the +12.8 ms under Hedera-style
+is not attributed to monitoring. The Stage 3 direction in the report follows
+STATUS.md open question 1 and is still Mutahar's to confirm.
