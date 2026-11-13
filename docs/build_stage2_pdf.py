@@ -79,7 +79,10 @@ S.append(Paragraph(
     "60 deliberate reroutes, each with a matched run where the flow was not moved; (6) two damage "
     "predictors (a hand-written formula and a machine-learning model) and the cost-aware "
     "controller that uses them. All five controllers run through one experiment runner on the "
-    "same seeded traffic.", P))
+    "same seeded traffic. Against the proposal's core plan, four items are still open and are "
+    "the first work of Stage 3: the pilot under BBR and with RACK loss detection switched off "
+    "(so far only Cubic with RACK on), a margin-only ablation, the k=4 fat-tree, and training "
+    "and testing the model on different topologies.", P))
 
 S.append(Paragraph("2. Refined problem", H))
 S.append(Paragraph(
@@ -159,7 +162,8 @@ S.append(Paragraph(
     "lost on the destination path over 10 s is -0.010 ± 0.012 Mbit/s, which is no measurable "
     "loss, and 58 of 60 moves are within ±0.1 Mbit/s. Modern Linux TCP detects reordering and "
     "undoes the unnecessary slow-down quickly. For comparison, rerouting gains each elephant "
-    "2.59 Mbit/s.", P))
+    "2.59 Mbit/s. In the proposal's units, per 30 s run the Hedera-style controller's reroutes "
+    "cost 0.03 ± 0.04 MB (damage) and gained 38.9 ± 14.5 MB over ECMP (benefit).", P))
 
 S.append(Paragraph("6. The improvement, and where it stands", H))
 S.append(Paragraph(
@@ -184,7 +188,8 @@ S.append(Paragraph(
     "<b>Next, for Stage 3.</b> A 16-trial pilot at 100 Mbit/s shows 10 to 50 times more "
     "reordering per move, and moves from a fast path onto an empty slow path cost 6 to 12 % of "
     "the link for 2 s (only 2 such trials so far). We will therefore (1) test the conditions "
-    "where damage should matter (higher link rates, larger delay gaps, frequent moves) and "
+    "where damage should matter (higher link rates, larger delay gaps, frequent moves, BBR, "
+    "RACK off) and "
     "retrain there, (2) add the fat-tree network, a link that degrades mid-run and the "
     "synchronized AI-training traffic from the proposal, and (3) report whichever way it comes "
     "out. If damage stays small, the finding is that reroute damage is not what limits "

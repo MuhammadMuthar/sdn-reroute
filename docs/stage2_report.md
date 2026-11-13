@@ -18,3 +18,4 @@ Where each number comes from:
 | Reordering events per run with and without monitoring (about 3 vs about 1000), short-flow median with monitoring only | `results/compare/compare-2026-10-26/chunk4_summary.md` |
 | Decision time per flow (0.19 ms ML, 0.002 ms formula), 90 training rows | `results/model/model-2026-10-26/model_summary.md` |
 | 100 Mbit/s pilot (16 trials) | `results/dataset/regime-2026-10-26/regime_pilot.md` |
+| Damage and benefit per run in MB (0.03 ± 0.04, 38.9 ± 14.5) | `results/compare/compare-2026-10-26/chunk4_summary.md`, "Damage per run" table |
