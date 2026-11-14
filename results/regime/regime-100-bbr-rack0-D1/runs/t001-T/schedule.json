@@ -1,0 +1,109 @@
+{
+ "scenario": "damage_moves",
+ "condition": "T",
+ "seed": 81001,
+ "duration": 27,
+ "hosts": {
+  "h1": "10.0.0.1",
+  "h2": "10.0.0.2",
+  "h3": "10.0.0.3",
+  "h4": "10.0.0.4",
+  "h5": "10.0.0.5",
+  "h6": "10.0.0.6",
+  "h7": "10.0.0.7",
+  "h8": "10.0.0.8"
+ },
+ "elephants": [
+  {
+   "id": "E1",
+   "src": "h1",
+   "dst": "h5",
+   "src_ip": "10.0.0.1",
+   "dst_ip": "10.0.0.5",
+   "sport": 40882,
+   "dport": 5201,
+   "start": 0.4224,
+   "duration": 27
+  },
+  {
+   "id": "E2",
+   "src": "h2",
+   "dst": "h6",
+   "src_ip": "10.0.0.2",
+   "dst_ip": "10.0.0.6",
+   "sport": 40032,
+   "dport": 5202,
+   "start": 0.195,
+   "duration": 27
+  }
+ ],
+ "mice": [],
+ "pins": [
+  {
+   "flow": "E1",
+   "spine": 4
+  },
+  {
+   "flow": "E2",
+   "spine": 4
+  }
+ ],
+ "moves": [
+  {
+   "at": 12.015,
+   "flow": "E1",
+   "spine": 1
+  }
+ ],
+ "tagged": [
+  "E1",
+  "E2"
+ ],
+ "snapshots": [
+  -2.0,
+  0.0,
+  2.0,
+  5.0,
+  10.0
+ ],
+ "ack_spine": null,
+ "sysctl": {
+  "net.ipv4.tcp_congestion_control": "bbr",
+  "net.ipv4.tcp_recovery": "0"
+ },
+ "spine_delay_ms": [
+  1.0,
+  1.0,
+  5.0,
+  10.0
+ ],
+ "snapshots_last_only": true,
+ "design": {
+  "trial": 1,
+  "arm": "T",
+  "moved": [
+   "E1"
+  ],
+  "pre": {
+   "E2": 4,
+   "E1": 4
+  },
+  "post": {
+   "E2": 4,
+   "E1": 1
+  },
+  "cap_mode": "",
+  "p": 4,
+  "q": 1,
+  "n_p": 1,
+  "n_q": 0,
+  "cap": null,
+  "mice": false,
+  "n_prev": 0,
+  "r": null,
+  "delta": null,
+  "t_move": 12.015,
+  "t_prev": null
+ },
+ "sha256": "15786acbd74a726366d50aa91a88f73f15f0071a5f5e6e27c51b7e73787a600b"
+}
