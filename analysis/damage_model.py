@@ -121,7 +121,9 @@ def predict(name, est, df):
 
 def gain_bytes(df):
     g = np.clip(df.gain_mbps.astype(float), 0, None)
-    g = np.minimum(g, np.clip(cost.LINK_MBPS - df.rate_mbps.astype(float), 0, None))
+    link = (pd.to_numeric(df["link_mbps"], errors="coerce").fillna(cost.LINK_MBPS)
+            if "link_mbps" in df else cost.LINK_MBPS)        # Chunk 7b: per row
+    g = np.minimum(g, np.clip(link - df.rate_mbps.astype(float), 0, None))
     return cost.mbps_to_bytes(g)
 
 

@@ -33,8 +33,10 @@ sys.path.insert(0, REPO)
 from controllers import cost  # noqa: E402
 from controllers.hedera import HederaController  # noqa: E402
 
-DEFAULT_MODEL = {"formula": os.path.join(REPO, "models", "formula.json"),
-                 "model": os.path.join(REPO, "models", "damage_model.joblib"),
+# COST_MODEL_DIR (Chunk 7b, runner --cost-models) replaces models/ for both files
+MODEL_DIR = os.environ.get("COST_MODEL_DIR") or os.path.join(REPO, "models")
+DEFAULT_MODEL = {"formula": os.path.join(MODEL_DIR, "formula.json"),
+                 "model": os.path.join(MODEL_DIR, "damage_model.joblib"),
                  "zero": None}
 
 

@@ -44,8 +44,11 @@ CONTROLLER_FEATURES = [
     "n_prev_moves",
     "since_last_move_s",    # None for a never-moved flow -> inf
     "delay_ms_p_config", "delay_ms_q_config",
+    "link_mbps",            # Chunk 7b: the link rate the controller is configured with
 ]
-DERIVED = ["delay_gap_ms", "rate_share_q", "bytes_in_flight_est"]
+# Chunk 7b adds the last three (pre-registered, LOG.md 2026-11-14)
+DERIVED = ["delay_gap_ms", "rate_share_q", "bytes_in_flight_est",
+           "delay_ratio_qp", "window_ratio_q", "q_empty"]
 FEATURES = CONTROLLER_FEATURES + DERIVED
 
 
@@ -53,9 +56,23 @@ def mbps_to_bytes(mbps, horizon_s=HORIZON_S):
     return mbps * 1e6 / 8.0 * horizon_s
 
 
+def link_of(feat):
+    """The feature record's link rate; LINK_MBPS for records written before
+    Chunk 7b (no link_mbps key, or NaN)."""
+    v = feat.get("link_mbps")
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        return LINK_MBPS
+    return LINK_MBPS if math.isnan(v) else v
+
+
 def derive(feat):
     """The DERIVED features from a controller feature dict (pure function)."""
     out = {}
+    link = link_of(feat)
+    d_p, d_q = float(feat["delay_ms_p_config"]), float(feat["delay_ms_q_config"])
+    r = float(feat["rate_mbps"])
     out["delay_gap_ms"] = float(feat["delay_ms_q_config"]) - float(feat["delay_ms_p_config"])
     # the moved flow's share of what the destination path will carry
     denom = float(feat["U_q"]) + float(feat["rate_mbps"])
@@ -63,6 +80,10 @@ def derive(feat):
     # bytes in flight the controller can estimate: rate x path RTT (2 x one-way delay)
     out["bytes_in_flight_est"] = float(feat["rate_mbps"]) * 1e6 / 8.0 * \
         2.0 * float(feat["delay_ms_p_config"]) / 1e3
+    # Chunk 7b: configured delays; RTT taken as 2 x one-way delay on both paths
+    out["delay_ratio_qp"] = d_q / d_p if d_p > 0 else math.inf
+    out["window_ratio_q"] = (r * d_p) / (link * d_q) if link > 0 and d_q > 0 else math.inf
+    out["q_empty"] = 1.0 if float(feat["elephants_on_q"]) == 0 else 0.0
     return out
 
 
@@ -112,7 +133,14 @@ class FormulaCost(DamageEstimator):
         C_hat = a0 + a1 * max(gap_ms, 0) * r_f
                    + a2 * r_f
                    + a3 * U_q * elephants_on_q
-                   + a4 * bytes_in_flight_est          (all in bytes over H)
+                   + a4 * bytes_in_flight_est
+                   + a5 * q_empty * max(0, link - r_f * d_p / d_q)
+                                                       (all in bytes over H)
+
+    The a5 term (Chunk 7b, LOG.md 2026-11-14) is the window mismatch Chunk 7a
+    measured: a flow moved onto an EMPTY path with a longer delay arrives with
+    the window of its old path, i.e. a rate of about r_f * d_p / d_q there,
+    and needs seconds to grow to the link rate.
 
     The coefficients are NOT invented: the defaults are all zero (predict
     nothing) until analysis/damage_model.py fits them by least squares on the
@@ -121,7 +149,7 @@ class FormulaCost(DamageEstimator):
     measured.
     """
     name = "formula"
-    TERMS = ["const", "gap_x_rate", "rate", "load_q_x_n", "bif"]
+    TERMS = ["const", "gap_x_rate", "rate", "load_q_x_n", "bif", "ramp"]
 
     def __init__(self, coef=None, path=None):
         if path:
@@ -141,7 +169,9 @@ class FormulaCost(DamageEstimator):
                     gap_x_rate=max(d["delay_gap_ms"], 0.0) * r,
                     rate=r,
                     load_q_x_n=float(feat["U_q"]) * float(feat["elephants_on_q"]),
-                    bif=d["bytes_in_flight_est"])
+                    bif=d["bytes_in_flight_est"],
+                    ramp=d["q_empty"] * max(0.0, link_of(feat) - r * float(feat["delay_ms_p_config"]) /
+                                            float(feat["delay_ms_q_config"])))
 
     def predict(self, feat):
         t = self.terms(feat)

@@ -59,6 +59,7 @@ CAP_MODE = dict(mode="b")     # how E1's cap is applied: iperf3 -b (as run first
 # Chunk 7a (damage regime): per-namespace sysctls and spine delays written into
 # every schedule (the runner applies and logs them); empty = the runner's defaults
 SETTING = dict(sysctl={}, spine_delay_ms=None)
+T_MOVE = [12.0, 14.0]         # t_move range (Chunk 7b: --t-move-range 6,14 for flow ages)
 
 
 def apply_setting(s):
@@ -75,7 +76,7 @@ def draw_trial(rng, p, q):
     prev = rng.random() < 0.4
     r = rng.choice([s for s in SPINES if s != p]) if prev else None
     delta = rng.choice(DELTAS) if prev else None
-    t_move = round(rng.uniform(12.0, 14.0), 3)
+    t_move = round(rng.uniform(*T_MOVE), 3)
     others = [s for s in SPINES if s not in (p, q)]
     comp = ["E2", "E3", "E4"]
     rng.shuffle(comp)
@@ -200,8 +201,8 @@ def main():
     ap.add_argument("--grid", default="", help="fixed factors instead of the random draw: "
                     "'p>q,...;n_p,...;n_q,...;reps', e.g. '4>1,3>1,1>4,1>2;1;0,1;2' (the damage-"
                     "regime pilot); uncapped, no mice, no previous move")
-    ap.add_argument("--placed-only", action="store_true", help="with --grid: leave out the "
-                    "elephants on neither p nor q (Chunk 7a)")
+    ap.add_argument("--placed-only", action="store_true", help="leave out the "
+                    "elephants on neither p nor q (Chunk 7a grid, Chunk 7b draw)")
     ap.add_argument("--sysctl", default="", help="comma list k=v set in every host namespace, "
                     "e.g. net.ipv4.tcp_congestion_control=bbr,net.ipv4.tcp_recovery=0 (Chunk 7a)")
     ap.add_argument("--spine-delays", default="", help="one-way ms per spine, e.g. 1,1,20,50")
@@ -210,8 +211,15 @@ def main():
     ap.add_argument("--flap-reps", type=int, default=5)
     ap.add_argument("--alone", action="store_true", help="feasibility run: E1 alone on s4, E2 "
                     "alone on s1, no move")
+    ap.add_argument("--cap-scale", type=float, default=1.0, help="multiply the caps (6M, 3M) "
+                    "by this, e.g. 10 at 100 Mbit/s (Chunk 7b)")
+    ap.add_argument("--t-move-range", default="12,14", help="t_move uniform in [a, b] s")
     ap.add_argument("--out", required=True, help="jobs JSON to write")
     a = ap.parse_args()
+    T_MOVE[:] = [float(x) for x in a.t_move_range.split(",")]
+    if a.cap_scale != 1.0:
+        CAPS[:] = [(None if c is None else "%gM" % (float(c[:-1]) * a.cap_scale), w)
+                   for c, w in CAPS]
     CAP_MODE["mode"] = a.cap_mode
     SETTING["sysctl"] = dict(kv.split("=", 1) for kv in a.sysctl.split(",") if kv)
     SETTING["spine_delay_ms"] = [float(x) for x in a.spine_delays.split(",")] if a.spine_delays else None
@@ -234,6 +242,10 @@ def main():
         slots = [pq for pq in itertools.permutations(SPINES, 2)
                  for _ in range(a.trials_per_pair)]
         trials = [draw_trial(rng, p, q) for p, q in slots]
+        if a.placed_only:              # Chunk 7b: drop elephants on neither p nor q
+            for t in trials:
+                t["competitors"] = {f: x for f, x in t["competitors"].items()
+                                    if x in (t["p"], t["q"])}
     order = list(range(len(trials)))
     rng.shuffle(order)                            # run order of the trials
     if a.count:

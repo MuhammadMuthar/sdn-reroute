@@ -1610,3 +1610,128 @@ Mutahar's decision.
 - Stage 2 PDF: the pilot is no longer listed as open; its result replaces the
   100 Mbit/s 16-trial pilot sentence.
 - No experiment was run in this session.
+
+## 2026-11-14 Chunk 7b: five-controller comparison where a reroute costs something (laptop), pre-registration
+
+Mutahar chose "Both" (via the project thread): this chunk is the comparison at
+long-path delays; the k=4 fat-tree with data-centre delays is a later chunk.
+Branch claude/chunk7b-compare from origin/claude/progress-report-2 (which does
+not yet contain the regime-100-bbr-* run directories of Chunk 7a; they are on
+claude/chunk7-regime, commit 28a0947d). Boot a4dff7ba. Written before any run
+of this chunk.
+
+### Setting (fixed for everything below)
+100 Mbit/s links, leaf queues 200 packets, spine netem limit 1000 (Chunk 7a
+scaling), spine one-way delays 1/1/20/50 ms, cubic, RACK on (tcp_recovery 1),
+set and read back in every host namespace. Runner keeps only the moved flow's
+pcaps (damage dataset) or none (comparison runs); receiver traces as before.
+
+### Controller changes (no rule changes)
+- The Hedera-style family reads the link rate and the configured spine delays
+  from the runner (env FABRIC_LINK_MBPS, FABRIC_SPINE_DELAYS_MS). Elephant
+  threshold, cooldown margin and the log threshold stay 10 %, 10 % and 5 % of
+  the link rate (10, 10, 5 Mbit/s here; exactly 1, 1, 0.5 at 10 Mbit/s as
+  before). The controller knows path delays from configuration, as before
+  (not measured); stated in every policy log's config record.
+- New controller-visible features (controllers/cost.py DERIVED), all computed
+  at decision time from the feature record: link_mbps; delay_ratio_qp = d_q /
+  d_p (configured one-way delays); window_ratio_q = (r_f x 2 d_p) / (link x 2
+  d_q), the moved flow's current window estimate against q's bandwidth-delay
+  product; q_empty = 1 if no elephant is on q. FormulaCost gets one more
+  pre-registered term, ramp = q_empty x max(0, link - r_f x d_p / d_q)
+  (Mbit/s; the rate the flow would get on q with its current window, below
+  the link), coefficient fitted like the others. Rule unchanged: move only if
+  gain_bytes > C_hat (both over 10 s) and the 5 s cooldown has passed.
+
+### Workloads
+- W1 "longpath_stagger" (designed so the situation arises, said openly): 8
+  elephants h1..h8 -> h9..h16 (8 hosts per leaf, so no two elephants share a
+  host link; corrected before any run: the first draft had two elephants per
+  receiver, whose shared downlink would hide the path), starts uniform in [0, 20] s,
+  durations uniform integer [10, 20] s, run 45 s, Poisson mice as in
+  ecmp_mixed (10/s per source, 2-40 s). With 0-6 elephants active on 4 paths,
+  ECMP collisions on the fast spines leave the slow spines empty, so the
+  least-loaded choice is often an empty 20 or 50 ms path.
+- W2 ecmp_mixed (4 elephants for 30 s, mice) unchanged, at these delays: the
+  existing, not hand-picked workload.
+- Feasibility before the campaign (not a comparison result): one W1 run with
+  Hedera-style; it must make moves onto s3 or s4 while that spine is empty. If
+  it never does, W1 is changed before the campaign and the change logged.
+
+### Damage dataset (deliberate reroutes, Chunk 5 method)
+`damage_design.py --trials-per-pair 5 --cap-mode fq --cap-scale 10
+--t-move-range 6,14 --placed-only`: 60 trials, every ordered spine pair 5
+times, elephants on source / destination drawn as in Chunk 5 (0-2 each),
+caps none / 60 / 30 Mbit/s (fq pacing), mice on or off, previous moves and
+flaps as in Chunk 5, t_move uniform in [6, 14] s (flow ages 6-14 s);
+monitor-only controller, matched no-move arm, Chunk 5 labels and exclusions.
+Model inputs: cost.FEATURES only.
+
+### Models
+analysis/damage_model.py unchanged in method: GroupKFold by spine pair (12
+groups -> 10 folds), mean / formula / tree / gbr, target the destination-path
+total deficit at W10 (bytes), MAE per fold with CI, pooled MAE, decision
+agreement (rule's verdict with C_hat vs with the measured damage). Final fits
+on all rows -> models/chunk7b/ (formula.json, damage_model.joblib = gbr); the
+cost-aware controllers load them from there (runner --cost-models).
+
+### Comparison
+Five controllers (ecmp, hedera, cooldown, costaware_formula, costaware_ml),
+seeds 1-10, every controller on every seed (block-randomised order, as Chunk
+4), W1 first, then W2. analysis/chunk7b.py: mean ± 95 % CI per controller,
+contrasts paired by seed (t CI on the differences).
+- Primary contrasts: costaware_formula - hedera and costaware_ml - hedera on
+  elephant goodput mean, elephant goodput min (worst elephant of the run),
+  and total elephant bytes delivered; each controller - ecmp on the same three.
+- Secondary: reroutes per minute, flaps per minute, moves onto s3 (20 ms) and
+  s4 (50 ms) per run, mice FCT p50 / p99, retransmissions; damage per run in
+  MB from matched replays of the controllers' reroutes only if time allows.
+- Exclusions: a run with an error or an elephant that did not finish is
+  excluded with its whole seed for the contrasts that involve it (Chunk 4).
+- Predictions (stated now): (P1) Hedera-style beats ECMP on elephant goodput
+  mean in W1 and W2 (CI > 0), as at 10 Mbit/s. (P2) The cost-aware
+  controllers make fewer moves onto s3/s4 than Hedera-style (CI < 0). (P3)
+  On the primary goodput contrasts against Hedera-style no direction is
+  predicted: Chunk 7a measured the damage against a flow that was on the long
+  path all along, while a held-back move also leaves the collision on the
+  source in place; we report the sign we get. (P4) If the damage model
+  predicts the ramp, holding back moves onto empty long paths raises the
+  worst elephant's goodput less than it lowers the mean (exploratory).
+
+### Code and feasibility (before the dataset and the comparison)
+- controllers/hedera.py: link rate and configured delays from the runner
+  (FABRIC_LINK_MBPS, FABRIC_SPINE_DELAYS_MS), thresholds 10 / 10 / 5 % of the
+  link, `link_mbps` in the feature record. controllers/cost.py: link_mbps,
+  delay_ratio_qp, window_ratio_q, q_empty, FormulaCost term `ramp`.
+  controllers/costaware.py: COST_MODEL_DIR. runner.py: passes the env,
+  `--cost-models`, campaign `--spine-delays` / `--sysctl`. traffic.py:
+  longpath_stagger (start_range / dur_range). damage_design.py: `--cap-scale`,
+  `--t-move-range`, `--placed-only` now also for the random draw (dropping the
+  elephants on neither p nor q; the draw itself is unchanged).
+  damage_dataset.py: elephant count threshold 10 % of the run's link rate,
+  link_mbps feature. damage_model.py: gain clipped at each row's link rate.
+  ecmp_mixed schedules are byte-identical to before (same sha256 for seed 1).
+  Tests: 40 pass (tests/test_chunk7b.py added).
+- Feasibility (results/compare7b/feas-hedera-W1, Hedera-style, W1, seed 101,
+  not one of the campaign seeds): run ok in 107 s; the controller logged
+  link 100, elephant threshold 10 Mbit/s, delays 1/1/20/50 (configuration);
+  every host read back cubic and tcp_recovery 1; 10 moves, of them onto an
+  empty s3/s4 (no elephant on q, U_q about 0): s2 -> s4 at 7.2 s, s3 -> s4 at
+  28.2 s, s1 -> s3 at 30.2 s (and s4 -> s3 at 4.2 s). W1 kept as designed.
+- Dataset campaign started 11:59 UTC (scripts/chunk7b_campaign.sh dataset,
+  design seed 77: 60 trials, 1-4 elephants per trial, caps none 30 / 60M 16 /
+  30M 14, n_q 0: 24, 1: 27, 2: 9, previous move in 19).
+
+### Dataset and models (2026-11-14, 11:59-14:1x UTC dataset; models 18:40 UTC)
+- results/dataset/dataset7b-2026-11-14: 120 of 120 runs ok, same boot; 59 of
+  60 trials labelled (trial 3 excluded: E1 not seen on its previous spine).
+- Destination-path total at W10 (Mbit/s, mean ± 95 % CI): all 1.15 ± 1.41;
+  fast -> slow 2.27 ± 3.26; n_q = 0 2.89 ± 3.47 (MB over 10 s: see summary.md).
+  Large only for uncapped flows moved onto an empty, longer path (trials 13,
+  41, 50, 54: 38.7, 10.3, 8.9, 7.9 Mbit/s); capped flows lose nothing.
+- results/model/model7b-2026-11-14: dest-total MAE (kB, GroupKFold 10 by
+  pair) mean 2875 ± 1894, formula 3333 ± 2446, tree 3144 ± 1791, gbr 3608 ±
+  2024: no estimator beats predicting the mean; decision agreement 0.39-0.43.
+  Models saved to models/chunk7b/.
+- NOT RUN YET: the five-controller campaign (scripts/chunk7b_campaign.sh w1,
+  then w2, ~1.5 h + 1.2 h) and analysis/chunk7b.py. Stopped at the usage limit.

@@ -47,6 +47,21 @@ SCENARIOS = {
                   size=dict(dist="bounded_pareto", alpha=1.2, lo=2000, hi=1000000)),
         pins=[], moves=[], tagged=[], snapshots=[],
     ),
+    # Chunk 7b (W1, designed, LOG.md 2026-11-14): 8 elephants with their own
+    # sender and receiver (8 hosts per leaf, so no two share a host link),
+    # staggered starts and finite durations, so that at times fewer elephants
+    # than paths are active and ECMP collisions on the fast spines leave a slow
+    # spine empty: the least-loaded choice is then an empty long path.
+    "longpath_stagger": dict(
+        hosts_per_leaf=8, duration=45,
+        elephants=dict(pairs=[[i, i + 8] for i in range(1, 9)],
+                       start_range=[0.0, 20.0], dur_range=[10, 20],
+                       cport_range=[40001, 40999]),
+        mice=dict(srcs=[1, 2, 3, 4], dsts=[9, 10, 11, 12], rate_per_src=10.0,
+                  t_start=2.0, t_end=40.0, sport_range=[20000, 39999],
+                  size=dict(dist="bounded_pareto", alpha=1.2, lo=2000, hi=1000000)),
+        pins=[], moves=[], tagged=[], snapshots=[],
+    ),
     # Chunk 5: the traffic of one deliberate-reroute trial. E1 (h1 -> h5) is the
     # flow that experiments/damage_design.py moves; E2..E4 are placed by pins;
     # mice come from h2..h4 only, so h1's counters stay E1's own. The design
@@ -127,13 +142,18 @@ def make_schedule(sc, seed):
         cports = rng.sample(range(el["cport_range"][0], el["cport_range"][1] + 1),
                             len(el["pairs"]))
     for i, ((s, d), fid) in enumerate(zip(el["pairs"], ids)):
-        start = round(rng.uniform(0, el["start_jitter"]), 4) if el["start_jitter"] else 0.0
+        if "start_range" in el:             # Chunk 7b: staggered, finite elephants
+            start = round(rng.uniform(*el["start_range"]), 4)
+            dur = rng.randint(*el["dur_range"])
+        else:
+            start = round(rng.uniform(0, el["start_jitter"]), 4) if el["start_jitter"] else 0.0
+            dur = sc["duration"]
         if fid in sc.get("drop", []):
             continue
         sched["elephants"].append(dict(
             id=fid, src="h%d" % s, dst="h%d" % d, src_ip=host_ip(s), dst_ip=host_ip(d),
             sport=cports[i], dport=ELEPHANT_DPORT0 + i, start=start,
-            duration=sc["duration"]))
+            duration=dur))
     present = {e["id"] for e in sched["elephants"]}
     sched["pins"] = [p for p in sc["pins"] if p["flow"] in present]
     sched["tagged"] = [t for t in sched["tagged"] if t in present]

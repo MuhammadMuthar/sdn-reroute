@@ -106,9 +106,23 @@ class HederaController(ECMPController):
     MARGIN_MBPS = 1.0         # "cooldown" only: hysteresis, 10 % of the link rate
     COUNT_IDLE_S = 5          # idle timeout of the per-flow leaf counting rules
     LOG_MIN_MBPS = 0.5        # flows logged in each round's record
+    delay_ms = tuple(DEFAULT_SPINE_DELAY_MS)   # configured one-way delays; env overrides
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # Chunk 7b: the runner tells the controller the link rate and the
+        # configured spine delays (not measured). The thresholds stay the same
+        # share of the link (10 %, 10 %, 5 %); at 10 Mbit/s they are exactly
+        # the class defaults above.
+        link = os.environ.get("FABRIC_LINK_MBPS")
+        if link:
+            self.LINK_MBPS = float(link)
+            self.ELEPHANT_MBPS = 0.1 * self.LINK_MBPS
+            self.MARGIN_MBPS = 0.1 * self.LINK_MBPS
+            self.LOG_MIN_MBPS = 0.05 * self.LINK_MBPS
+        dl = os.environ.get("FABRIC_SPINE_DELAYS_MS")
+        self.delay_ms = ([float(x) for x in dl.split(",")] if dl
+                         else list(DEFAULT_SPINE_DELAY_MS))
         self.policy = os.environ.get("HEDERA_POLICY", self.POLICY)
         if self.policy not in self.POLICIES:
             raise ValueError("HEDERA_POLICY must be one of %s" % (self.POLICIES,))
@@ -126,7 +140,9 @@ class HederaController(ECMPController):
                        cooldown_s=self.COOLDOWN_S if self.policy == "cooldown" else None,
                        margin_mbps=self.MARGIN_MBPS if self.policy == "cooldown" else None,
                        link_mbps=self.LINK_MBPS, count_idle_s=self.COUNT_IDLE_S,
-                       spine_delay_ms_config=list(DEFAULT_SPINE_DELAY_MS)))
+                       log_min_mbps=self.LOG_MIN_MBPS,
+                       spine_delay_ms_config=list(self.delay_ms),
+                       delays_source="configuration (runner), not measured"))
         self.threads.append(hub.spawn(self._poll_loop))
 
     def _log(self, rec):
@@ -370,8 +386,9 @@ class HederaController(ECMPController):
                         elephants_on_p=n_p, elephants_on_q=n_q, age_s=now - fl.t_syn,
                         bytes_so_far=fl.bytes, n_prev_moves=fl.n_moves,
                         since_last_move_s=since, path_src=fl.path_src,
-                        delay_ms_p_config=DEFAULT_SPINE_DELAY_MS[p - 1],
-                        delay_ms_q_config=DEFAULT_SPINE_DELAY_MS[q - 1])
+                        link_mbps=self.LINK_MBPS,
+                        delay_ms_p_config=self.delay_ms[p - 1],
+                        delay_ms_q_config=self.delay_ms[q - 1])
             go, why = self._rule(feat)
             feat["why"] = why
             if not go:

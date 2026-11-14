@@ -347,9 +347,12 @@ def round_features(rd, meta, sched, des, t_sent):
     rate = float(me[0]["rate"]) if me else 0.0
     p, q = des["p"], des["q"]
 
+    link = float(meta.get("mbps") or 10.0)
+    thr = ELEPHANT_MBPS * link / 10.0     # 10 % of the link, as controllers/hedera.py
+
     def on(x):
         return sum(1 for f in flows if f["flow"]["src"] in left and f.get("path") == x and
-                   float(f["rate"]) >= ELEPHANT_MBPS)
+                   float(f["rate"]) >= thr)
     t_rel = last["t"] - meta["t0"]
     feat = dict(rate_mbps=rate, U_p=U.get(p, np.nan), U_q=U.get(q, np.nan),
                 elephants_on_p=on(p), elephants_on_q=on(q), age_s=t_rel - e1["start"],
@@ -357,7 +360,8 @@ def round_features(rd, meta, sched, des, t_sent):
                 n_prev_moves=des["n_prev"],
                 since_last_move_s=(t_rel - des["t_prev"]) if des["n_prev"] else None,
                 delay_ms_p_config=meta["spine_delay_ms"][p - 1],
-                delay_ms_q_config=meta["spine_delay_ms"][q - 1])
+                delay_ms_q_config=meta["spine_delay_ms"][q - 1],
+                link_mbps=link)
     feat["gain_mbps"] = feat["U_p"] - (feat["U_q"] + rate)
     return dict(feat=feat, round=last["round"], lag=(t_sent - meta["t0"]) - t_rel,
                 path=me[0].get("path") if me else None)

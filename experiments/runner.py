@@ -134,13 +134,22 @@ def run(a):
                 uid=os.getuid(), userns=os.environ.get("SDN_USERNS_INNER") == "1",
                 kernel=os.uname().release, t_wall_start=time.time(), errors=[],
                 boot_id=open("/proc/sys/kernel/random/boot_id").read().strip())
+    # Chunk 7b: the controller learns the link rate and the configured spine
+    # delays from here (at 10 Mbit/s and default delays nothing changes), and
+    # the cost-aware apps their model directory
+    ctl_env = dict(FABRIC_LINK_MBPS="%g" % a.mbps,
+                   FABRIC_SPINE_DELAYS_MS=",".join("%g" % x for x in meta["spine_delay_ms"]))
+    if a.cost_models:
+        ctl_env["COST_MODEL_DIR"] = os.path.abspath(a.cost_models)
+    meta["controller_env"] = dict(ctl_env)
     ctl_log = open(os.path.join(rd, "controller.log"), "w")
     ctl = subprocess.Popen([VENV_PY, os.path.join(REPO, "controllers", "run.py"),
                             "--ofp-tcp-listen-port", str(OF_PORT),
                             os.path.join(REPO, "controllers", a.controller + ".py")],
                            stdout=ctl_log, stderr=subprocess.STDOUT,
                            env=dict(os.environ, FABRIC_CMD_PORT=str(CMD_PORT),
-                                    FABRIC_HOSTS_PER_LEAF=str(hpl), FABRIC_LOG_DIR=rd))
+                                    FABRIC_HOSTS_PER_LEAF=str(hpl), FABRIC_LOG_DIR=rd,
+                                    **ctl_env))
     bg, dumps, clients = [], [], []
     counters = {}
     net = None
@@ -439,6 +448,13 @@ def campaign(a):
     """Seeded campaign: every condition (and, with --controllers, every
     controller) of rep r uses seed + r - 1, in a block-randomised order."""
     from experiments.traffic import make_schedule, resolve, schedule_sha256
+    def setting(s):
+        # Chunk 7b: spine delays and host sysctls for every run of the campaign
+        if a.spine_delays:
+            s["spine_delay_ms"] = [float(x) for x in a.spine_delays.split(",")]
+        if a.sysctl:
+            s["sysctl"] = dict(kv.split("=", 1) for kv in a.sysctl.split(","))
+        return s
     conds = a.conditions.split(",") if a.conditions else [""]
     ctrls = a.controllers.split(",") if a.controllers else [a.controller]
     multi = bool(a.controllers)
@@ -453,8 +469,8 @@ def campaign(a):
         run_id = "%s%s%sr%02d" % (k + "-" if multi else "", c, "-" if c else "", rep)
         jobs.append(dict(run_id=run_id, controller=k, condition=c, rep=rep,
                          seed=a.seed + rep - 1,
-                         make=lambda c=c, rep=rep: make_schedule(resolve(a.scenario, c or None),
-                                                                 a.seed + rep - 1)))
+                         make=lambda c=c, rep=rep: setting(make_schedule(
+                             resolve(a.scenario, c or None), a.seed + rep - 1))))
     plan = dict(controller=a.controller, controllers=ctrls, scenario=a.scenario,
                 conditions=conds, runs=a.runs, seed=a.seed,
                 order=[[rep, c, k] if multi else [rep, c] for rep, c, k in order])
@@ -484,7 +500,7 @@ def execute(a, plan, jobs, schedule_sha256):
                 kernel=os.uname().release, euid=os.geteuid(), argv=sys.argv,
                 boot_id=open("/proc/sys/kernel/random/boot_id").read().strip(),
                 host_default_qdisc=open("/proc/sys/net/core/default_qdisc").read().strip(),
-                keep_pcaps=a.keep_pcaps)
+                keep_pcaps=a.keep_pcaps, cost_models=a.cost_models)
     plan_path = os.path.join(a.out, "plan.json")
     if not os.path.exists(plan_path):
         json.dump(plan, open(plan_path, "w"), indent=1)
@@ -504,7 +520,8 @@ def execute(a, plan, jobs, schedule_sha256):
         json.dump(sched, open(os.path.join(rd, "schedule.json"), "w"), indent=1)
         cmd = [sys.executable, os.path.abspath(__file__), "run", "--run-dir", rd,
                "--controller", j["controller"], "--queue", str(a.queue), "--mbps", str(a.mbps),
-               "--host-qdisc", a.host_qdisc] + (["--ovs-stats"] if a.ovs_stats else [])
+               "--host-qdisc", a.host_qdisc] + (["--ovs-stats"] if a.ovs_stats else []) + \
+            (["--cost-models", a.cost_models] if a.cost_models else [])
         if root:
             subprocess.run(["mn", "-c"], capture_output=True)
         else:
@@ -549,6 +566,9 @@ def main():
         p.add_argument("--ovs-stats", action="store_true",
                        help="record ovs-appctl dpctl/show, upcall/show, coverage/show at the "
                        "start and end of every run (Chunk 5 check of the monitoring artifact)")
+        p.add_argument("--cost-models", default="",
+                       help="directory with formula.json and damage_model.joblib for the "
+                       "cost-aware controllers (default models/)")
         p.add_argument("--host-qdisc", choices=["netem", "default"], default="netem",
                        help="host NIC qdisc; netem (10 us) frees each skb when it leaves "
                        "the host, see topologies/leafspine.py")
@@ -569,6 +589,10 @@ def main():
                            "randomised per seed (run ids <controller>-r<rep>)")
             p.add_argument("--runs", type=int, default=10)
             p.add_argument("--seed", type=int, default=1)
+            p.add_argument("--spine-delays", default="", help="one-way ms per spine, e.g. "
+                           "1,1,20,50 (Chunk 7b); default topologies/layout.py")
+            p.add_argument("--sysctl", default="", help="comma list k=v set in every host "
+                           "namespace (Chunk 7b)")
         if name == "replay":
             p.add_argument("--spec", required=True, help="jobs JSON from experiments/replay.py")
     a = ap.parse_args()
