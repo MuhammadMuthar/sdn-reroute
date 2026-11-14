@@ -1430,3 +1430,169 @@ reordering events on short flows but does not raise their median completion
 time (monitor-only minus ECMP: -0.96 ms), so the +12.8 ms under Hedera-style
 is not attributed to monitoring. The Stage 3 direction in the report follows
 STATUS.md open question 1 and is still Mutahar's to confirm.
+
+## 2026-11-13 Chunk 7a: damage-regime campaign (laptop), pre-registration
+
+Approved Stage 3 plan (Mutahar, via the project thread): first look for the
+conditions where one reroute costs the destination path goodput, then the
+fat-tree and AI-training traffic. The proposal (section V.A) also promised a
+pilot under CUBIC and BBR, each with RACK on and off. Branch
+claude/chunk7-regime (from claude/stage2-milestone-report). Boot a4dff7ba.
+
+### Plan (written before any run of this chunk; no label has been read)
+- Factors (one campaign directory per setting):
+  rate 100 and 10 Mbit/s (leaf queue 200 and 20 packets, spine netem limit
+  max(100, 10 x rate) as in the regime pilot); congestion control cubic or bbr
+  (net.ipv4.tcp_congestion_control set in every host namespace); RACK on
+  (net.ipv4.tcp_recovery at its default, 1) or off (0), in every host
+  namespace; spine one-way delays D1 = 1, 1, 5, 10 ms (as before) or D2 = 1,
+  1, 20, 50 ms (large gap). 16 settings. Every run logs the sysctls as read
+  back from every host namespace, and iperf3 its sender's congestion control.
+- Cells per setting: slow -> fast (s4 -> s1) and fast -> slow (s1 -> s4) moves
+  of E1, each onto an empty (n_q = 0) or a loaded (n_q = 1) destination; one
+  other elephant on the source in every trial (n_p = 1, as in the pilot); no
+  cap, no mice, no previous move; t_move uniform in [12, 14] s.
+  Elephants that are on neither p nor q are left out of the schedule (they
+  share no link with E1 and only cost CPU and disk). 5 matched pairs per cell
+  (move / no-move, same seed, monitor-only controller), 4 cells x 5 = 20
+  trials = 40 runs per setting, `damage_design.py --grid "4>1,1>4;1;0,1;5"`
+  with design seed 70 + setting index.
+- Order (time: about 6 h per rate): 100 Mbit/s cubic (RACK on / off x D1 /
+  D2), 100 Mbit/s bbr (needs `sudo modprobe tcp_bbr`, asked for; not run if
+  the module is absent), the repeated-move condition, then 10 Mbit/s cubic,
+  then 10 Mbit/s bbr. Whatever is not reached is reported as not run.
+- Repeated moves (Carpa et al. 2017): E1 alone (no other elephant), starts on
+  s1, moved s1 -> s4 -> s1 ... every 0.5 s (20 moves) or every 2 s (5 moves)
+  for 10 s from t_move, against the no-move run (E1 on s1 throughout, a sham
+  flow-mod at every move time); D1, cubic, RACK on, 10 and 100 Mbit/s; 5
+  seeds, each seed one no-move and two flapping runs. Reported: E1's goodput
+  over the 10 s from the first move as a share of the no-move run's, and the
+  deficit in Mbit/s and % of the link.
+- Labels and checks: Chunk 5's (analysis/damage_dataset.py design_pair):
+  deficit = no-move minus move from each arm's own barrier reply, W2 / W5 /
+  W10, destination-path total = E1 + bystanders on q; exclusions: run error or
+  a missing arm, uplink captures not showing each elephant on its intended
+  spines, an elephant later than 5 s before the move. Added now: a run whose
+  host namespaces do not all read back the intended congestion control and
+  tcp_recovery is excluded. Excluded trials are reported, not rerun.
+- Decision rule (per cell): a cell "has damage" if the destination-path total
+  deficit at W10 has a 95 % CI (t, over its trials) entirely above zero AND
+  a mean of at least 1 % of the link rate over W10 (0.1 Mbit/s at 10, 1 Mbit/s
+  at 100). W2, bytes, the moved term, reordering and retransmissions are
+  reported beside it. No multiplicity correction (32 cells); the 1 % floor is
+  what guards against a chance CI above zero. Same rule for the repeated-move
+  runs, with E1's deficit over the 10 s.
+- "Realistic" cells (for step 6, a recommendation for the comparison setup):
+  RACK on (the Linux default), either congestion control, either rate or
+  delay set. RACK-off cells are a stress condition (older or other stacks)
+  and are reported but do not on their own set the comparison's setup.
+- Feasibility before each new setting (not labels): one run with E1 alone on
+  s4 (the slowest spine) and E2 alone on s1 at the same time (disjoint paths),
+  no move; each should reach about 95 % of the link rate; the sysctls must
+  read back as set in every host.
+- Expectations (stated now, checked descriptively): (1) 10 Mbit/s, D1, cubic,
+  RACK on: about zero in every cell (Chunk 5); (2) 100 Mbit/s fast -> slow
+  onto an empty path: positive, 1-2 % of the link at W10 (the pilot, n = 2),
+  so possibly at the 1 % floor; (3) RACK off: slow -> fast moves trigger
+  dupack-based fast retransmits and a cwnd cut, a positive deficit, larger
+  with D2; (4) bbr: smaller deficits than cubic (no loss-based cwnd cut);
+  (5) moving every 0.5 s costs E1 a visible share of its goodput, every 2 s
+  less.
+
+### Code (before the campaign)
+- runner.py: a schedule may carry `spine_delay_ms` and `sysctl` (set with
+  `sysctl -w` in every host namespace after the network starts; meta.json
+  records `sysctl_set` and `sysctl_hosts`, the values read back from all 8
+  hosts); `--keep-pcaps <ids>` deletes every other pcap after the run's traces
+  and summaries are written (disk: the 100 Mbit/s pilot used 170 MB of pcaps
+  per run, 26 GB were free). Without these keys and flags the runner behaves
+  exactly as before.
+- damage_design.py: `--sysctl`, `--spine-delays`, `--placed-only`, `--flap`,
+  `--alone`. scripts/chunk7_campaign.sh runs everything; analysis/regime.py,
+  tests/test_regime.py (rule, sysctl check, cell aggregation).
+- Feasibility gate in the script: both lone elephants at >= 90 % of the link
+  and sysctls read back (the plan said "about 95 %"; the 90 % cut-off was
+  written into the script before any run). The feasibility run of
+  100-cubic-rack1-D2 was made by hand first, with design seed 70; the script
+  reused it (seed 71 would have been its index).
+- Dev runs (gitignored, not reported): results/regime/dev-flap (one seed of
+  the repeated moves at 100 Mbit/s, to check that 20 flow-mods in 10 s land
+  on time: 27-42 ms after their scheduled times).
+- Note: ACKs follow ECMP, so the slow spine adds its delay once to the RTT
+  (about 51 ms on s4 with D2, not 100 ms). The monitor's per-round
+  `delay_ms_*_config` features still name the default delays; they are not
+  used here (the analysis takes the delays from meta.json).
+
+### Campaign run (2026-11-13 19:02 - 2026-11-14 06:47 UTC), boot a4dff7ba
+`scripts/chunk7_campaign.sh all` under systemd-inhibit,
+results/regime/chunk7.console.log. tcp_bbr was loaded (not by this session)
+before the bbr settings started at 22:07 UTC, so all 16 settings ran: 640 design runs + 30
+repeated-move runs + 16 feasibility runs, every one ok; no trial excluded by
+any pre-registered check (64 cells x 5 pairs). Feasibility: cubic 95.3-95.8
+% of the link on both spines in every setting; bbr 91.9-95.7 % (lowest:
+100 Mbit/s, RACK off, D2, the 50 ms spine); every host read back the
+intended congestion control and tcp_recovery in every run.
+
+### Result (results/regime/summary/regime_cells.md, figures/regime_damage.png)
+`analysis/regime.py`. Destination-path total deficit at W10, % of the link,
+mean ± 95 % CI, n = 5 per cell:
+- 8 of 64 cells have damage by the pre-registered rule, 4 of them
+  "realistic" (RACK on). All 8 are the same move: fast -> slow onto an EMPTY
+  destination with the large delay gap (s1 1 ms -> s4 50 ms one-way):
+  100 Mbit/s cubic 54.9 ± 9.3 (RACK on), 48.7 ± 23.7 (off); bbr 77.1 ± 9.6
+  (on), 47.6 ± 45.8 (off); 10 Mbit/s cubic 25.9 ± 10.8 (on), 19.3 ± 13.4
+  (off); bbr 31.8 ± 29.2 (on), 33.7 ± 27.5 (off).
+- With the default delays (1/1/5/10 ms) no cell has damage at either rate,
+  either congestion control, RACK on or off. The pilot's 100 Mbit/s fast ->
+  slow empty case: cubic 3.99 ± 5.50 % (two of five trials 6.5 and 10 Mbit/s,
+  the others 0-3), bbr 12.3 ± 20.5 %.
+- Onto a loaded destination the total is about zero in every setting, also
+  with the large gap (cubic 100 D2 fast -> slow +0.10 ± 0.34 %): the moved
+  flow's loss is the bystander's gain. Slow -> fast moves reorder heavily
+  (cell means up to 325 reord_seen and 555 retransmissions in W2) yet cost the path
+  nothing (largest mean +4.5 %, CI through zero).
+- One cell has a CI above zero below the 1 % floor (100 bbr RACK on D1 fast
+  -> slow loaded, +0.71 ± 0.51 %).
+- Cross-check from a second data source (iperf3 server reports, not the
+  packet traces) for 100 cubic D2, 100 cubic D1 and 10 cubic D2, fast ->
+  slow empty: every trial's W10 goodput agrees with the trace-based one
+  within 0.6 Mbit/s.
+- Mechanism (ss of E1, trial 11 of each 100 Mbit/s D2 RACK-on campaign):
+  cubic carries ~123-141 packets of cwnd from the 1 ms path onto a 51 ms RTT
+  path that needs about 425; with no loss it grows in congestion avoidance
+  (231 after 9.5 s), while the no-move arm holds 450-610. bbr's cwnd stays at
+  16-20 packets for over 5 s after the move, then jumps to 876 by 9.5 s
+  (consistent with its 10 s min_rtt filter still holding the short path's
+  RTT; not checked further). No retransmissions or reordering in these
+  moves: this damage is a window mismatch, not reordering.
+- Repeated moves s1 <-> s4 (D1, cubic, RACK on), E1's goodput over 10 s as a
+  share of the no-move run: 100 Mbit/s every 0.5 s 0.9961 ± 0.0058, every 2 s
+  0.9962 ± 0.0059; 10 Mbit/s 0.9924 ± 0.0093 and 0.9994 ± 0.0008. No damage
+  by the rule; retransmissions 157 vs 3 (100, 0.5 s).
+- Expectations stated before the campaign: (1) 10 Mbit/s D1 cubic RACK on
+  about zero: yes; (2) 100 Mbit/s fast -> slow empty 1-2 %: D1 3.99 ± 5.50,
+  not significant; with D2 far larger (55 %); (3) RACK off causes slow ->
+  fast damage: NO, no RACK-off cell differs from its RACK-on twin in that
+  direction; (4) bbr smaller than cubic: NO, bbr's fast -> slow empty damage
+  is as large or larger; (5) moving every 0.5 s costs a visible share: NO
+  (< 1 %, CI through zero). (3)-(5) contradict expectations.
+- Reading: on modern Linux TCP, reordering from a reroute costs nothing
+  measurable in any condition tried, even 300+ reorderings and RACK off.
+  What costs goodput is moving a flow onto a much longer, empty path: the
+  sender's window (cubic) or its RTT estimate (bbr) is sized for the old
+  path, and the flow needs many seconds to grow into the new BDP. The
+  deficit is against a flow that was on the long path all along; it scales
+  with the RTT gap and the rate, and disappears when the destination
+  already carries a flow (the share shifts). Not independently recomputed
+  (a second-source check of the damaged cells only).
+
+### Step 6: realistic cells with damage, a recommendation (comparison not started)
+The 4 RACK-on cells with damage are all fast -> slow onto an empty path with
+a 1 vs 50 ms one-way gap. Recommendation for the controller comparison: use
+paths with a large RTT asymmetry (the D2 set, or a WAN-like topology), at
+100 Mbit/s, with workloads where the least-loaded path is often the long,
+empty one; the cost model's features should include the RTT ratio of q to p,
+the moved flow's cwnd (or rate x RTT_p) against the BDP of q, and whether q
+is empty. With datacenter-like gaps (1-10 ms) there is still nothing to
+predict. Whether a 50 ms gap is a fair setting for the course project is
+Mutahar's decision.

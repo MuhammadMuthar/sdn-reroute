@@ -1,0 +1,71 @@
+{
+ "scenario": "damage_moves",
+ "condition": "alone",
+ "seed": 75000,
+ "duration": 27,
+ "hosts": {
+  "h1": "10.0.0.1",
+  "h2": "10.0.0.2",
+  "h3": "10.0.0.3",
+  "h4": "10.0.0.4",
+  "h5": "10.0.0.5",
+  "h6": "10.0.0.6",
+  "h7": "10.0.0.7",
+  "h8": "10.0.0.8"
+ },
+ "elephants": [
+  {
+   "id": "E1",
+   "src": "h1",
+   "dst": "h5",
+   "src_ip": "10.0.0.1",
+   "dst_ip": "10.0.0.5",
+   "sport": 40944,
+   "dport": 5201,
+   "start": 0.0884,
+   "duration": 27
+  },
+  {
+   "id": "E2",
+   "src": "h2",
+   "dst": "h6",
+   "src_ip": "10.0.0.2",
+   "dst_ip": "10.0.0.6",
+   "sport": 40768,
+   "dport": 5202,
+   "start": 0.0036,
+   "duration": 27
+  }
+ ],
+ "mice": [],
+ "pins": [
+  {
+   "flow": "E1",
+   "spine": 4
+  },
+  {
+   "flow": "E2",
+   "spine": 1
+  }
+ ],
+ "moves": [],
+ "tagged": [],
+ "snapshots": [],
+ "ack_spine": null,
+ "sysctl": {
+  "net.ipv4.tcp_congestion_control": "cubic",
+  "net.ipv4.tcp_recovery": "1"
+ },
+ "spine_delay_ms": [
+  1.0,
+  1.0,
+  20.0,
+  50.0
+ ],
+ "design": {
+  "kind": "alone",
+  "E1": 4,
+  "E2": 1
+ },
+ "sha256": "702696f3104726e9485106df378cae5c78408a9cfc6a935762526759b529098e"
+}

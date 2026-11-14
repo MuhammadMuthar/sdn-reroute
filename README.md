@@ -140,6 +140,20 @@ Paper figures: `figures/chunk4_comparison.png` (four controllers),
 dataset), `figures/chunk6_comparison.png` (five controllers). Results and
 their caveats are in STATUS.md; the full record is LOG.md.
 
+## Where reroutes cost goodput (Chunk 7a)
+
+```bash
+# needs `sudo modprobe tcp_bbr` once per boot for the BBR settings (skipped otherwise)
+scripts/chunk7_campaign.sh all        # 16 settings x 20 matched pairs + repeated moves, ~12 h
+.venv/bin/python analysis/regime.py --root results/regime \
+    --out results/regime/summary --fig figures/regime_damage.png
+```
+Rate (10 / 100 Mbit/s), congestion control (cubic / bbr) and RACK (net.ipv4.tcp_recovery
+1 / 0) per host namespace, spine delays 1/1/5/10 or 1/1/20/50 ms; slow -> fast and fast ->
+slow moves onto an empty or loaded path. Output: `results/regime/summary/regime_cells.md`
+and `figures/regime_damage.png`. The runner keeps only the moved flow's pcaps
+(`--keep-pcaps E1`, disk); every receiver trace is kept.
+
 ## Layout
 
 ```

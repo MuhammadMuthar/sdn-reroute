@@ -1,115 +1,79 @@
 # STATUS (rewritten at the end of every session)
 
-Last session: Chunks 4 and 5 on the laptop, 2026-10-26. Chunk 5 finish line
-met: the damage dataset (results/dataset/dataset-2026-10-26/dataset/:
-dataset.csv, data_dictionary.md, correlations.csv, summary.md) and its two
-figures, 90 labelled rows. The headline: across 60 deliberately varied
-reroutes, a move shifts goodput between flows for a couple of seconds but the
-destination path as a whole loses nothing measurable. That needs a decision
-before Chunk 6 (open question 1).
+Last session: Chunk 7a (damage-regime campaign) on the laptop, 2026-11-13/14,
+branch claude/chunk7-regime (from claude/stage2-milestone-report, not merged).
+Finish line met: results/regime/summary/regime_cells.md (+ .csv) and
+figures/regime_damage.png give, for 64 cells (16 settings x 4 move types, 5
+matched pairs each) and the repeated-move runs, the goodput one reroute costs
+the destination path, with 95 % CIs and the pre-registered verdict.
+
+Headline: reordering from a reroute costs nothing measurable in any condition
+tried (10 and 100 Mbit/s, cubic and bbr, RACK on and off, 1-10 or 1-50 ms
+paths, moves every 0.5 s). The only damage is a fast -> slow move onto an
+EMPTY path with a large RTT gap (1 -> 50 ms one-way): 19-77 % of the link
+over 10 s, in all 8 such cells, because the window (cubic) or the RTT
+estimate (bbr) is sized for the old path. Onto a loaded path the same move
+costs the path nothing (the share shifts).
 
 ## What works
 
-- Everything from Chunks 1-4 (rootless Mininet, the runner with host-NIC
-  netem, ECMP / monitor-only / Hedera-style / cooldown-only controllers,
-  matched move / no-move replays, `analysis/chunk4.py`).
-- Chunk 5: `experiments/damage_design.py` (seeded deliberate reroutes: every
-  ordered spine pair, load on both paths, rate cap, mice, previous move /
-  flap; each trial a move arm and a matched no-move arm under the monitor-only
-  controller, which records the features), runner options `bitrate` /
-  `pacing` per elephant, `snapshots_last_only` and `--ovs-stats`, the monitor
-  tracks runner-pinned flows, `analysis/damage_dataset.py` (dataset, labels,
-  features, exclusions, summary, correlations, figures, plus the Chunk 4
-  controller moves as extra rows), `analysis/upcall_check.py`.
-- `scripts/chunk4_campaigns.sh`, `scripts/chunk5_campaign.sh` rerun each chunk.
-- Tests: `.venv/bin/python -m unittest discover -s tests -t .` (31 pass).
+- Everything from Chunks 1-6 (rootless Mininet, runner, five controllers,
+  matched move / no-move pairs, damage dataset, models, 5-way comparison).
+- Chunk 7a: runner schedule keys `spine_delay_ms` and `sysctl` (set and read
+  back in every host namespace, logged in meta.json), `--keep-pcaps`;
+  `damage_design.py --sysctl --spine-delays --placed-only --flap --alone`;
+  `scripts/chunk7_campaign.sh` (feasibility gate per setting, ~12 h);
+  `analysis/regime.py` (cells, verdicts, repeated moves, feasibility, figure).
+- BBR needs `sudo modprobe tcp_bbr` once per boot (it was loaded on boot
+  a4dff7ba).
+- Tests: `.venv/bin/python -m unittest discover -s tests -t .` (34 pass).
 
-## Key numbers
+## Key numbers (results/regime/summary/regime_cells.md)
 
-Chunk 5 dataset (design rows: 32 uncapped trials + 28 capped trials with a
-true cap; deficit = no-move minus move, Mbit/s, mean ± 95 % CI):
+Destination-path total deficit over 10 s after the move, % of link, mean ±
+95 % CI, n = 5:
 
-| group | trials | moved flow, W2 | destination-path total, W2 | destination-path total, W10 |
-|---|---|---|---|---|
-| all | 60 | +0.04 ± 0.16 | -0.058 ± 0.063 | -0.010 ± 0.012 |
-| slow -> fast | 25 | -0.27 ± 0.23 | -0.10 ± 0.15 | -0.017 ± 0.029 |
-| fast -> slow | 25 | +0.32 ± 0.25 | -0.023 ± 0.054 | -0.004 ± 0.008 |
-| 1 elephant on the destination | 25 | +0.20 ± 0.27 | -0.077 ± 0.035 | -0.016 ± 0.006 |
+| move | rate | delays | cubic RACK on | cubic RACK off | bbr RACK on | bbr RACK off |
+|---|---|---|---|---|---|---|
+| fast -> slow, empty q | 100 | 1/1/20/50 | **54.9 ± 9.3** | **48.7 ± 23.7** | **77.1 ± 9.6** | **47.6 ± 45.8** |
+| fast -> slow, empty q | 10 | 1/1/20/50 | **25.9 ± 10.8** | **19.3 ± 13.4** | **31.8 ± 29.2** | **33.7 ± 27.5** |
+| fast -> slow, empty q | 100 | 1/1/5/10 | 4.0 ± 5.5 | 1.4 ± 1.4 | 12.3 ± 20.5 | 10.6 ± 24.3 |
+| fast -> slow, empty q | 10 | 1/1/5/10 | 0.05 ± 0.20 | 0.09 ± 0.28 | 1.0 ± 2.1 | 2.2 ± 3.8 |
 
-- 58 of 60 trials within ±0.1 Mbit/s at W10. The moves do reorder: the moved
-  flow's socket saw a reordering in W2 in 14 / 25 slow->fast, 3 / 10
-  same-delay and 7 / 25 fast->slow moves (0 / 60 no-move arms), plus about 4.5
-  extra retransmissions; none of it shows in goodput over 2-10 s.
-- Spearman r with the W10 total (60 design rows): predicted gain +0.53,
-  unacked before the move -0.40, rate -0.38, elephants on the destination
-  -0.38, delay gap -0.02; the label spans about ±0.03 Mbit/s for most trials.
-- Pre-stated expectations: (1) moved term larger for slow->fast: opposite
-  sign (as in Chunk 3); (2) total nearer zero than the moved term with a
-  loaded destination: yes; (3) |total| < 0.5 Mbit/s: yes; (4) reordering in
-  most slow->fast moves and few others: 56 % slow->fast, 28 % fast->slow.
-- A flaw found and fixed post hoc: iperf3 `-b` is an average since the start,
-  so a capped flow held below its cap catches up at full rate after the move
-  (5 of 28 capped trials; it made the first campaign's n_q = 0 mean -0.46
-  Mbit/s). The 28 capped trials were rerun with kernel pacing (`--fq-rate`);
-  the as-run summary is kept (dataset-as-run/).
+Bold = damage by the pre-registered rule (CI above 0 and >= 1 % of the link).
+All other 56 cells (slow -> fast, and any move onto a loaded path) have no
+damage; one has a CI above zero below the floor (100 bbr RACK on D1 fast ->
+slow loaded, +0.71 ± 0.51 %). Slow -> fast moves reorder heavily (up to 325
+reorderings and 555 retransmissions in 2 s, cell means) without any goodput loss.
+Repeated moves s1 <-> s4 (D1, cubic, RACK on), E1's goodput share of the
+no-move run: 100 Mbit/s 0.9961 ± 0.0058 (every 0.5 s), 0.9962 ± 0.0059 (2 s);
+10 Mbit/s 0.9924 ± 0.0093, 0.9994 ± 0.0008: no damage.
 
-Chunk 4 (results/compare/compare-2026-10-26, damage-2026-10-26):
-- Hedera-style vs ECMP: elephant goodput +2.59 Mbit/s [1.62, 3.56], mice FCT
-  p50 +12.8 ms [5.6, 20.0]; cooldown-only the same; reroute damage at W10
-  +0.02 ± 0.03 (Hedera-style), -0.09 ± 0.14 Mbit/s (cooldown-only).
-- The monitoring's per-flow counting rules reorder about 470 of 1057 mice per
-  run inside the leaf; Open vSwitch's own counters confirm the slow path
-  (results/compare/upcall-2026-10-26/upcall_check.md: 5.86 vs 0.23 missed
-  lookups per new flow, 1583 vs 0 revalidations from flow-table changes, 1831
-  vs 0 duplicate upcalls per run).
+Damaged cells cross-checked against iperf3's own receiver reports (agree
+within 0.6 Mbit/s per trial); not independently recomputed by a separate
+agent. Expectations that failed: RACK off did not create damage, bbr is not
+less damaged than cubic, and repeated moves cost < 1 %.
 
-Earlier chunks: TSQ artifact fixed by host-NIC netem (Chunk 3); loaded move:
-the moved flow gains, the bystander pays, total -0.03 Mbit/s (Chunk 3).
-
-Every Chunk 4 and Chunk 5 number above was recomputed from raw data by an
-independent agent with its own code: all confirmed (LOG.md).
-
-## Decisions made this session
-
-1. Keep the Hedera-style monitoring for Chunks 5-6 (Mutahar, "continue",
-   16:11 UTC).
-2. Chunk 5 rate caps by kernel pacing instead of iperf3 -b (post hoc, this
-   thread, LOG.md).
-3. The optional Chunk 3 root cross-check (`scripts/chunk3_sudo.sh`) is
-   dropped, not run (Mutahar, 21:11 UTC): Chunk 2's root cross-check
-   (results/gate/sudo-check-2026-10-19) already showed that the rootless
-   setup gives the same results as real root on the system OVS, and every
-   chunk since used that same rootless setup. Nothing from Chunk 3 is open.
+Earlier: Chunk 5 (10 Mbit/s, varied reroutes) W10 total -0.010 ± 0.012
+Mbit/s; Chunk 6: no damage model beats the mean, both cost-aware controllers
+match Hedera-style (+2.5 Mbit/s over ECMP).
 
 ## Next
 
-Chunk 6 (CHUNKS.md B): `analysis/damage_model.py --data
-results/dataset/dataset-2026-10-26/dataset/dataset.csv` (13 groups: 12 spine
-pairs + chunk4), then the 5-way comparison. But see open question 1 first.
-
-Damage-regime pilot at 100 Mbit/s (results/dataset/regime-2026-10-26/
-regime_pilot.md, 16 trials, not independently recomputed): slow -> fast
-moves reorder 10-50x more than at 10 Mbit/s but the destination path still
-loses nothing (W10 -0.02 % ± 0.09 of the link); only fast -> slow moves onto
-an empty path cost something (the flow ramps to the larger BDP: 6-12 % of the
-link in W2, 1-2 % over W10, n = 2). By the pre-stated rule Chunk 6 runs as
-planned (10 Mbit/s).
-
-Chunk 6 (results/compare/five-way-2026-10-26/chunk6_summary.md): no damage
-model beats predicting the mean (MAE about 29 kB per move at W10); both
-cost-aware controllers keep Hedera-style's gain over ECMP (+2.5 Mbit/s) and
-do not differ from Hedera-style or cooldown-only (formula minus Hedera-style
--0.05 [-0.23, 0.13] Mbit/s). Five controllers run through one runner.
-Headline numbers independently recomputed: all confirmed.
+Chunk 7a found a regime with real damage; the comparison was not started
+(as instructed). Recommendation: run the cost-aware vs Hedera-style
+comparison with a large RTT asymmetry (the 1/1/20/50 ms set, or a WAN-like
+topology) at 100 Mbit/s, with workloads where the least-loaded path is often
+the long, empty one; add features for the RTT ratio q/p, cwnd (or rate x
+RTT_p) against q's BDP, and whether q is empty. Then the fat-tree and the
+AI-training traffic (Stage 3 plan).
 
 ## Open questions for Mutahar
 
-1. (Pilot done, see above; Chunk 6 as planned unless you prefer 100 Mbit/s.) The damage label is about zero on this setup (10 Mbit/s, 1-10 ms paths,
-   CUBIC with RACK and DSACK undo). A cost-aware controller trained on it will
-   predict C_hat about 0 and behave like cooldown-only. Options: (a) run Chunk
-   6 as planned and report that honestly; (b) first look for the regime where
-   damage exists (higher link rate, e.g. 50-100 Mbit/s, or larger delay gaps,
-   so more packets are reordered than RACK's window absorbs), one pilot campaign;
-   (c) both, (b) first. Recommendation: (c).
-2. Paper framing: TSQ plus the monitoring artifact as one methods section,
-   and "reroute damage is small on modern Linux TCP" as a finding?
+1. Is a 1 vs 50 ms path gap an acceptable setting for the comparison? It is
+   WAN-like, not a datacenter fabric; with 1-10 ms gaps there is still no
+   damage to predict.
+2. Merge claude/chunk7-regime (it includes the Stage 2 report branch)?
+   It adds about 3 GB of receiver traces to the repository.
+3. Independent recomputation of the Chunk 7a table by a separate agent
+   (the project's usual check) before the numbers go into a report?

@@ -56,6 +56,16 @@ SNAPSHOTS = [-2.0, 0.0, 2.0, 5.0, 10.0]
 CONTROLLER = "ecmp_mon"
 SEED_BASE = 5000
 CAP_MODE = dict(mode="b")     # how E1's cap is applied: iperf3 -b (as run first) or fq
+# Chunk 7a (damage regime): per-namespace sysctls and spine delays written into
+# every schedule (the runner applies and logs them); empty = the runner's defaults
+SETTING = dict(sysctl={}, spine_delay_ms=None)
+
+
+def apply_setting(s):
+    if SETTING["sysctl"]:
+        s["sysctl"] = dict(SETTING["sysctl"])
+    if SETTING["spine_delay_ms"]:
+        s["spine_delay_ms"] = list(SETTING["spine_delay_ms"])
 
 
 def draw_trial(rng, p, q):
@@ -79,8 +89,11 @@ def draw_trial(rng, p, q):
 
 def arm_schedule(trial, k, seed, arm):
     s = make_schedule(resolve("damage_moves"), seed)
+    apply_setting(s)
     if not trial["mice"]:
         s["mice"] = []
+    # --placed-only: only E1 and the competitors the trial places (on p or q)
+    s["elephants"] = [e for e in s["elephants"] if e["id"] == "E1" or e["id"] in trial["competitors"]]
     for e in s["elephants"]:
         if e["id"] == "E1" and trial["cap"]:
             e["pacing" if CAP_MODE["mode"] == "fq" else "bitrate"] = trial["cap"]
@@ -106,17 +119,71 @@ def arm_schedule(trial, k, seed, arm):
     return s
 
 
-def grid_trial(rng, p, q, n_p, n_q):
-    """A fixed-factor trial (--grid): no cap, no mice, no previous move."""
+def grid_trial(rng, p, q, n_p, n_q, placed_only=False):
+    """A fixed-factor trial (--grid): no cap, no mice, no previous move.
+    placed_only (Chunk 7a): the elephants on neither p nor q are left out."""
     t = draw_trial(rng, p, q)
     others = [s for s in SPINES if s not in (p, q)]
     comp = ["E2", "E3", "E4"]
     rng.shuffle(comp)
     place = {f: p if i < n_p else q if i < n_p + n_q else rng.choice(others)
              for i, f in enumerate(comp)}
+    if placed_only:
+        place = {f: x for f, x in place.items() if x in (p, q)}
     t.update(n_p=n_p, n_q=n_q, cap=None, mice=False, n_prev=0, r=None, delta=None,
              t_prev=None, competitors=place)
     return t
+
+
+def flap_jobs(rng, seed0, reps, periods, span=10.0, p=1, q=4):
+    """Chunk 7a, repeated moves (an eager controller, Carpa et al. 2017): E1
+    alone, starting on p; arm P<period> moves it p -> q -> p ... every period
+    for span s from t_move; arm C keeps it on p with a sham flow-mod (to p) at
+    the same times. One C and one run per period for each seed."""
+    jobs = []
+    for k in range(reps):
+        seed = seed0 + k
+        t_move = round(rng.uniform(12.0, 14.0), 3)
+        arms = ["C"] + ["P%g" % x for x in periods]
+        rng.shuffle(arms)
+        for arm in arms:
+            s = make_schedule(resolve("damage_moves"), seed)
+            apply_setting(s)
+            s["mice"] = []
+            s["elephants"] = [e for e in s["elephants"] if e["id"] == "E1"]
+            s["condition"] = arm
+            s["pins"] = [dict(flow="E1", spine=p)]
+            per = None if arm == "C" else float(arm[1:])
+            times = [round(t_move + i * (per or periods[0]), 3)
+                     for i in range(int(round(span / (per or periods[0]))))]
+            if arm == "C":         # a sham at every time any flapping arm moves
+                times = sorted({round(t_move + i * x, 3) for x in periods
+                                for i in range(int(round(span / x)))})
+            s["moves"] = [dict(at=t, flow="E1", spine=(p if arm == "C" else (q if i % 2 == 0 else p)))
+                          for i, t in enumerate(times)]
+            s["tagged"] = ["E1"]
+            s["snapshots"] = []
+            s["snapshots_last_only"] = True
+            s["ack_spine"] = None
+            s["design"] = dict(kind="flap", trial=k, arm=arm, period=per, span=span, p=p, q=q,
+                               t_move=t_move, n_moves=len(times), moved=["E1"])
+            jobs.append(dict(run_id="f%03d-%s" % (k, arm), controller=CONTROLLER, condition=arm,
+                             rep=k, schedule=s))
+    return jobs
+
+
+def alone_jobs(seed, slow=4, fast=1):
+    """Chunk 7a feasibility: E1 alone on the slowest spine and E2 alone on the
+    fastest (disjoint paths), no move; each should reach about 95 % of the link."""
+    s = make_schedule(resolve("damage_moves"), seed)
+    apply_setting(s)
+    s["mice"] = []
+    s["elephants"] = [e for e in s["elephants"] if e["id"] in ("E1", "E2")]
+    s["condition"] = "alone"
+    s["pins"] = [dict(flow="E1", spine=slow), dict(flow="E2", spine=fast)]
+    s["moves"], s["tagged"], s["snapshots"], s["ack_spine"] = [], [], [], None
+    s["design"] = dict(kind="alone", E1=slow, E2=fast)
+    return [dict(run_id="alone", controller=CONTROLLER, condition="alone", rep=0, schedule=s)]
 
 
 def main():
@@ -133,14 +200,35 @@ def main():
     ap.add_argument("--grid", default="", help="fixed factors instead of the random draw: "
                     "'p>q,...;n_p,...;n_q,...;reps', e.g. '4>1,3>1,1>4,1>2;1;0,1;2' (the damage-"
                     "regime pilot); uncapped, no mice, no previous move")
+    ap.add_argument("--placed-only", action="store_true", help="with --grid: leave out the "
+                    "elephants on neither p nor q (Chunk 7a)")
+    ap.add_argument("--sysctl", default="", help="comma list k=v set in every host namespace, "
+                    "e.g. net.ipv4.tcp_congestion_control=bbr,net.ipv4.tcp_recovery=0 (Chunk 7a)")
+    ap.add_argument("--spine-delays", default="", help="one-way ms per spine, e.g. 1,1,20,50")
+    ap.add_argument("--flap", default="", help="repeated-move runs instead of a design: periods "
+                    "in s, e.g. 0.5,2 (Chunk 7a); --flap-reps seeds")
+    ap.add_argument("--flap-reps", type=int, default=5)
+    ap.add_argument("--alone", action="store_true", help="feasibility run: E1 alone on s4, E2 "
+                    "alone on s1, no move")
     ap.add_argument("--out", required=True, help="jobs JSON to write")
     a = ap.parse_args()
     CAP_MODE["mode"] = a.cap_mode
+    SETTING["sysctl"] = dict(kv.split("=", 1) for kv in a.sysctl.split(",") if kv)
+    SETTING["spine_delay_ms"] = [float(x) for x in a.spine_delays.split(",")] if a.spine_delays else None
     rng = random.Random(a.seed)
+    if a.flap or a.alone:
+        jobs = (flap_jobs(rng, SEED_BASE + a.seed * 1000, a.flap_reps,
+                          [float(x) for x in a.flap.split(",")]) if a.flap
+                else alone_jobs(SEED_BASE + a.seed * 1000))
+        os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
+        json.dump(dict(source="flap" if a.flap else "alone", design_seed=a.seed,
+                       setting=SETTING, n_jobs=len(jobs), jobs=jobs), open(a.out, "w"), indent=1)
+        print("%d runs -> %s" % (len(jobs), a.out))
+        return
     if a.grid:
         pairs, nps, nqs, reps = a.grid.split(";")
         pairs = [tuple(int(x) for x in pq.split(">")) for pq in pairs.split(",")]
-        trials = [grid_trial(rng, p, q, int(n_p), int(n_q)) for p, q in pairs
+        trials = [grid_trial(rng, p, q, int(n_p), int(n_q), a.placed_only) for p, q in pairs
                   for n_p in nps.split(",") for n_q in nqs.split(",") for _ in range(int(reps))]
     else:
         slots = [pq for pq in itertools.permutations(SPINES, 2)
@@ -164,6 +252,7 @@ def main():
                              rep=k, schedule=arm_schedule(trials[k], k, seed, arm)))
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     spec = dict(source="design", design_seed=a.seed, trials_per_pair=a.trials_per_pair,
+                setting=SETTING,
                 n_trials=len(trials), n_jobs=len(jobs), jobs=jobs)
     json.dump(spec, open(a.out, "w"), indent=1)
     with open(os.path.join(os.path.dirname(os.path.abspath(a.out)), "design.csv"), "w",

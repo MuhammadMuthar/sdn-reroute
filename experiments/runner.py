@@ -127,7 +127,10 @@ def run(a):
                 scenario=sched["scenario"], condition=sched["condition"],
                 seed=sched["seed"], duration_s=D, queue_pkts=a.queue, mbps=a.mbps,
                 host_qdisc=a.host_qdisc,
-                hosts_per_leaf=hpl, spine_delay_ms=list(DEFAULT_SPINE_DELAY_MS),
+                hosts_per_leaf=hpl,
+                # Chunk 7a: a schedule may set its own spine delays and host sysctls
+                spine_delay_ms=list(sched.get("spine_delay_ms") or DEFAULT_SPINE_DELAY_MS),
+                sysctl_set=dict(sched.get("sysctl") or {}),
                 uid=os.getuid(), userns=os.environ.get("SDN_USERNS_INNER") == "1",
                 kernel=os.uname().release, t_wall_start=time.time(), errors=[],
                 boot_id=open("/proc/sys/kernel/random/boot_id").read().strip())
@@ -147,6 +150,7 @@ def run(a):
         step("controller up")
         net = build_net(hosts_per_leaf=hpl, controller_port=OF_PORT)
         meta["tc_setup"] = start_net(net, mbps=a.mbps, queue=a.queue,
+                                     spine_delay_ms=tuple(meta["spine_delay_ms"]),
                                      host_qdisc=a.host_qdisc)
         for _ in range(100):
             st = ctl_cmd({"cmd": "status"})
@@ -175,6 +179,17 @@ def run(a):
             # ephemeral ports (iperf3 control connections) stay out of the
             # elephant (40001-40999) and mice (20000-39999) source-port ranges
             h.cmd("sysctl -qw net.ipv4.ip_local_port_range='%s'" % LOCAL_PORT_RANGE)
+        # per-namespace TCP sysctls (Chunk 7a: congestion control, tcp_recovery),
+        # set in every host and read back from every host
+        for h in H.values():
+            for k, v in meta["sysctl_set"].items():
+                out = h.cmd("sysctl -qw %s=%s 2>&1" % (k, v)).strip()
+                if out:
+                    raise RuntimeError("sysctl %s=%s on %s: %s" % (k, v, h.name, out))
+        meta["sysctl_hosts"] = {n: {k: h.cmd("sysctl -n %s 2>&1" % k).strip()
+                                    for k in ("net.ipv4.tcp_congestion_control",
+                                              "net.ipv4.tcp_recovery")}
+                                for n, h in sorted(H.items())}
         meta["ip_local_port_range"] = H["h1"].cmd(
             "sysctl -n net.ipv4.ip_local_port_range").strip()
         meta["sysctl"] = {k: H["h1"].cmd("sysctl -n %s 2>&1" % k).strip() for k in SYSCTLS}
@@ -382,8 +397,11 @@ def run(a):
 
 
 # -------------------------------------------------------------- campaign ----
-def postprocess(rd):
-    """As the normal user: summarise captures, keep traces, gzip pcaps."""
+def postprocess(rd, keep_pcaps=None):
+    """As the normal user: summarise captures, keep traces, gzip pcaps.
+    keep_pcaps (Chunk 7a, disk): a list of flow ids; after the summaries and
+    traces are written, every other pcap of the run (uplinks, other flows) is
+    deleted. pcaps are never committed (.gitignore); the traces are."""
     from experiments.pcaptrace import write_trace
     from experiments.spinetrace import summarize
     meta = json.load(open(os.path.join(rd, "meta.json")))
@@ -401,7 +419,12 @@ def postprocess(rd):
             write_trace(p, os.path.join(rd, "%s_%s_trace.csv.gz" % (side, e["id"])),
                         e["sport"], t0, dirs=(0,) if side == "send" else (0, 1))
             pcaps[side + e["id"]] = p
-    for p in pcaps.values():
+    for k, p in pcaps.items():
+        k = str(k)
+        if keep_pcaps is not None and not (k.startswith(("send", "recv")) and
+                                           k[4:] in keep_pcaps):
+            os.remove(p)
+            continue
         subprocess.run(["gzip", "-f", p], check=True)
     subprocess.run([VENV_PY, os.path.join(REPO, "experiments", "metrics.py"), "run", rd],
                    check=True)
@@ -460,7 +483,8 @@ def execute(a, plan, jobs, schedule_sha256):
                 started=time.strftime("%Y-%m-%dT%H:%M:%S%z"), host=os.uname().nodename,
                 kernel=os.uname().release, euid=os.geteuid(), argv=sys.argv,
                 boot_id=open("/proc/sys/kernel/random/boot_id").read().strip(),
-                host_default_qdisc=open("/proc/sys/net/core/default_qdisc").read().strip())
+                host_default_qdisc=open("/proc/sys/net/core/default_qdisc").read().strip(),
+                keep_pcaps=a.keep_pcaps)
     plan_path = os.path.join(a.out, "plan.json")
     if not os.path.exists(plan_path):
         json.dump(plan, open(plan_path, "w"), indent=1)
@@ -495,7 +519,7 @@ def execute(a, plan, jobs, schedule_sha256):
         status = "ok" if rc == 0 else "FAILED rc=%d (see %s/run.log)" % (rc, rd)
         if rc == 0:
             try:
-                postprocess(rd)
+                postprocess(rd, a.keep_pcaps.split(",") if a.keep_pcaps else None)
             except Exception as exc:
                 status = "POSTPROCESS FAILED: %s" % exc
         print("%s, %.0f s" % (status, time.time() - t), flush=True)
@@ -533,6 +557,10 @@ def main():
         else:
             p.add_argument("--out", required=True)
             p.add_argument("--stop-on-error", action="store_true")
+            p.add_argument("--keep-pcaps", default="",
+                           help="comma list of flow ids whose host pcaps are kept; all other "
+                           "pcaps are deleted after postprocessing (Chunk 7a, disk). "
+                           "Default: keep all")
         if name == "campaign":
             p.add_argument("--scenario", required=True)
             p.add_argument("--conditions", default="", help="comma list, if the scenario has any")
