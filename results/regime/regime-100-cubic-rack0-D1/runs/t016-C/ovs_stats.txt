@@ -1,0 +1,179 @@
+== l1 dump-group-stats
+OFPST_GROUP reply (OF1.3) (xid=0x6):
+ group_id=1,duration=42.478s,ref_count=5,packet_count=77,byte_count=6439,bucket0:packet_count=40,byte_count=3596,bucket1:packet_count=7,byte_count=426,bucket2:packet_count=23,byte_count=1887,bucket3:packet_count=7,byte_count=530
+== l1 dump-flows
+ cookie=0x0, duration=36.325s, table=0, n_packets=223294, n_bytes=338061369, priority=200,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.6,tp_src=40699,tp_dst=5202 actions=output:"l1-s1"
+ cookie=0x0, duration=36.324s, table=0, n_packets=97889, n_bytes=148199647, priority=200,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.7,tp_src=40382,tp_dst=5203 actions=output:"l1-s4"
+ cookie=0x0, duration=36.326s, table=0, n_packets=125302, n_bytes=189701481, priority=200,tcp,nw_src=10.0.0.1,nw_dst=10.0.0.5,tp_src=40961,tp_dst=5201 actions=output:"l1-s4"
+ cookie=0x0, duration=42.510s, table=0, n_packets=66663, n_bytes=4414663, priority=100,dl_dst=00:00:00:00:00:01 actions=output:"l1-h1"
+ cookie=0x0, duration=42.509s, table=0, n_packets=115761, n_bytes=7648447, priority=100,dl_dst=00:00:00:00:00:02 actions=output:"l1-h2"
+ cookie=0x0, duration=42.509s, table=0, n_packets=53236, n_bytes=3515302, priority=100,dl_dst=00:00:00:00:00:03 actions=output:"l1-h3"
+ cookie=0x0, duration=42.509s, table=0, n_packets=2, n_bytes=196, priority=100,dl_dst=00:00:00:00:00:04 actions=output:"l1-h4"
+ cookie=0x0, duration=42.509s, table=0, n_packets=16, n_bytes=1318, priority=10,dl_dst=00:00:00:00:00:05 actions=group:1
+ cookie=0x0, duration=42.509s, table=0, n_packets=16, n_bytes=1336, priority=10,dl_dst=00:00:00:00:00:06 actions=group:1
+ cookie=0x0, duration=42.509s, table=0, n_packets=16, n_bytes=1336, priority=10,dl_dst=00:00:00:00:00:07 actions=group:1
+ cookie=0x0, duration=42.509s, table=0, n_packets=2, n_bytes=196, priority=10,dl_dst=00:00:00:00:00:08 actions=group:1
+ cookie=0x0, duration=42.510s, table=0, n_packets=3, n_bytes=222, priority=20,tcp,tcp_flags=+syn-ack actions=CONTROLLER:128,group:1
+== l1 dump-ports
+OFPST_PORT reply (OF1.3) (xid=0x2): 9 ports
+  port LOCAL: rx pkts=0, bytes=0, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=0, bytes=0, drop=0, errs=0, coll=0
+           duration=42.552s
+  port  "l1-h4": rx pkts=9, bytes=842, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=12, bytes=1012, drop=0, errs=0, coll=0
+           duration=42.553s
+  port  "l1-h1": rx pkts=125337, bytes=189704430, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=66672, bytes=4415389, drop=0, errs=0, coll=0
+           duration=42.553s
+  port  "l1-h3": rx pkts=97923, bytes=148202508, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=53246, bytes=3516118, drop=0, errs=0, coll=0
+           duration=42.553s
+  port  "l1-s1": rx pkts=44, bytes=3838, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=223326, bytes=338032613, drop=0, errs=0, coll=0
+           duration=42.553s
+  port  "l1-h2": rx pkts=223328, bytes=338064214, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=115771, bytes=7649263, drop=0, errs=0, coll=0
+           duration=42.553s
+  port  "l1-s4": rx pkts=66660, bytes=4414316, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=223153, bytes=337814756, drop=0, errs=0, coll=0
+           duration=42.553s
+  port  "l1-s2": rx pkts=115757, bytes=7647970, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=22, bytes=1428, drop=0, errs=0, coll=0
+           duration=42.553s
+  port  "l1-s3": rx pkts=53237, bytes=3515388, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=36, bytes=2797, drop=0, errs=0, coll=0
+           duration=42.553s
+== l2 dump-group-stats
+OFPST_GROUP reply (OF1.3) (xid=0x6):
+ group_id=1,duration=42.587s,ref_count=5,packet_count=235662,byte_count=15578608,bucket0:packet_count=35,byte_count=3112,bucket1:packet_count=115748,byte_count=7647244,bucket2:packet_count=53228,byte_count=3514662,bucket3:packet_count=66651,byte_count=4413590
+== l2 dump-flows
+ cookie=0x0, duration=42.604s, table=0, n_packets=66663, n_bytes=4414663, priority=10,dl_dst=00:00:00:00:00:01 actions=group:1
+ cookie=0x0, duration=42.604s, table=0, n_packets=115761, n_bytes=7648447, priority=10,dl_dst=00:00:00:00:00:02 actions=group:1
+ cookie=0x0, duration=42.604s, table=0, n_packets=53236, n_bytes=3515302, priority=10,dl_dst=00:00:00:00:00:03 actions=group:1
+ cookie=0x0, duration=42.604s, table=0, n_packets=2, n_bytes=196, priority=10,dl_dst=00:00:00:00:00:04 actions=group:1
+ cookie=0x0, duration=42.604s, table=0, n_packets=125283, n_bytes=189638410, priority=100,dl_dst=00:00:00:00:00:05 actions=output:"l2-h5"
+ cookie=0x0, duration=42.604s, table=0, n_packets=223296, n_bytes=338030098, priority=100,dl_dst=00:00:00:00:00:06 actions=output:"l2-h6"
+ cookie=0x0, duration=42.604s, table=0, n_packets=97898, n_bytes=148178974, priority=100,dl_dst=00:00:00:00:00:07 actions=output:"l2-h7"
+ cookie=0x0, duration=42.604s, table=0, n_packets=2, n_bytes=196, priority=100,dl_dst=00:00:00:00:00:08 actions=output:"l2-h8"
+ cookie=0x0, duration=42.604s, table=0, n_packets=0, n_bytes=0, priority=20,tcp,tcp_flags=+syn-ack actions=CONTROLLER:128,group:1
+== l2 dump-ports
+OFPST_PORT reply (OF1.3) (xid=0x2): 9 ports
+  port LOCAL: rx pkts=0, bytes=0, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=0, bytes=0, drop=0, errs=0, coll=0
+           duration=42.630s
+  port  "l2-h8": rx pkts=9, bytes=842, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=12, bytes=1012, drop=0, errs=0, coll=0
+           duration=42.630s
+  port  "l2-h5": rx pkts=66670, bytes=4415309, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=125295, bytes=189639318, drop=0, errs=0, coll=0
+           duration=42.631s
+  port  "l2-s1": rx pkts=223322, bytes=338032429, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=44, bytes=3838, drop=0, errs=0, coll=0
+           duration=42.631s
+  port  "l2-h6": rx pkts=115768, bytes=7649093, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=223308, bytes=338031006, drop=0, errs=0, coll=0
+           duration=42.631s
+  port  "l2-h7": rx pkts=53243, bytes=3515948, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=97910, bytes=148179882, drop=0, errs=0, coll=0
+           duration=42.631s
+  port  "l2-s4": rx pkts=223149, bytes=337814572, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=66660, bytes=4414316, drop=0, errs=0, coll=0
+           duration=42.631s
+  port  "l2-s2": rx pkts=18, bytes=1244, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=115757, bytes=7647970, drop=0, errs=0, coll=0
+           duration=42.631s
+  port  "l2-s3": rx pkts=32, bytes=2613, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=53237, bytes=3515388, drop=0, errs=0, coll=0
+           duration=42.630s
+== s1 dump-flows
+ cookie=0xc402, duration=33.504s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.1,nw_dst=10.0.0.5,tp_src=40961,tp_dst=5201 actions=output:"s1-l2"
+ cookie=0xc402, duration=33.504s, table=0, n_packets=218205, n_bytes=330360922, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.6,tp_src=40699,tp_dst=5202 actions=output:"s1-l2"
+ cookie=0xc402, duration=33.504s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.7,tp_src=40382,tp_dst=5203 actions=output:"s1-l2"
+ cookie=0x0, duration=42.629s, table=0, n_packets=14, n_bytes=1269, priority=100,dl_dst=00:00:00:00:00:01 actions=output:"s1-l1"
+ cookie=0x0, duration=42.629s, table=0, n_packets=13, n_bytes=1203, priority=100,dl_dst=00:00:00:00:00:02 actions=output:"s1-l1"
+ cookie=0x0, duration=42.629s, table=0, n_packets=8, n_bytes=640, priority=100,dl_dst=00:00:00:00:00:03 actions=output:"s1-l1"
+ cookie=0x0, duration=42.629s, table=0, n_packets=0, n_bytes=0, priority=100,dl_dst=00:00:00:00:00:04 actions=output:"s1-l1"
+ cookie=0x0, duration=42.629s, table=0, n_packets=17, n_bytes=1605, priority=100,dl_dst=00:00:00:00:00:05 actions=output:"s1-l2"
+ cookie=0x0, duration=42.629s, table=0, n_packets=5085, n_bytes=7668796, priority=100,dl_dst=00:00:00:00:00:06 actions=output:"s1-l2"
+ cookie=0x0, duration=42.629s, table=0, n_packets=5, n_bytes=334, priority=100,dl_dst=00:00:00:00:00:07 actions=output:"s1-l2"
+ cookie=0x0, duration=42.629s, table=0, n_packets=0, n_bytes=0, priority=100,dl_dst=00:00:00:00:00:08 actions=output:"s1-l2"
+== s1 dump-ports
+OFPST_PORT reply (OF1.3) (xid=0x2): 3 ports
+  port LOCAL: rx pkts=0, bytes=0, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=0, bytes=0, drop=0, errs=0, coll=0
+           duration=42.649s
+  port  "s1-l1": rx pkts=223326, bytes=338032613, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=44, bytes=3838, drop=0, errs=0, coll=0
+           duration=42.649s
+  port  "s1-l2": rx pkts=44, bytes=3838, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=223322, bytes=338032429, drop=0, errs=0, coll=0
+           duration=42.649s
+== s2 dump-flows
+ cookie=0xc402, duration=33.534s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.1,nw_dst=10.0.0.5,tp_src=40961,tp_dst=5201 actions=output:"s2-l2"
+ cookie=0xc402, duration=33.534s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.6,tp_src=40699,tp_dst=5202 actions=output:"s2-l2"
+ cookie=0xc402, duration=33.534s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.7,tp_src=40382,tp_dst=5203 actions=output:"s2-l2"
+ cookie=0x0, duration=42.642s, table=0, n_packets=8, n_bytes=640, priority=100,dl_dst=00:00:00:00:00:01 actions=output:"s2-l1"
+ cookie=0x0, duration=42.642s, table=0, n_packets=115740, n_bytes=7646604, priority=100,dl_dst=00:00:00:00:00:02 actions=output:"s2-l1"
+ cookie=0x0, duration=42.642s, table=0, n_packets=0, n_bytes=0, priority=100,dl_dst=00:00:00:00:00:03 actions=output:"s2-l1"
+ cookie=0x0, duration=42.642s, table=0, n_packets=0, n_bytes=0, priority=100,dl_dst=00:00:00:00:00:04 actions=output:"s2-l1"
+ cookie=0x0, duration=42.642s, table=0, n_packets=5, n_bytes=334, priority=100,dl_dst=00:00:00:00:00:05 actions=output:"s2-l2"
+ cookie=0x0, duration=42.642s, table=0, n_packets=2, n_bytes=92, priority=100,dl_dst=00:00:00:00:00:06 actions=output:"s2-l2"
+ cookie=0x0, duration=42.642s, table=0, n_packets=0, n_bytes=0, priority=100,dl_dst=00:00:00:00:00:07 actions=output:"s2-l2"
+ cookie=0x0, duration=42.642s, table=0, n_packets=0, n_bytes=0, priority=100,dl_dst=00:00:00:00:00:08 actions=output:"s2-l2"
+== s2 dump-ports
+OFPST_PORT reply (OF1.3) (xid=0x2): 3 ports
+  port LOCAL: rx pkts=0, bytes=0, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=0, bytes=0, drop=0, errs=0, coll=0
+           duration=42.672s
+  port  "s2-l1": rx pkts=22, bytes=1428, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=115757, bytes=7647970, drop=0, errs=0, coll=0
+           duration=42.673s
+  port  "s2-l2": rx pkts=115757, bytes=7647970, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=18, bytes=1244, drop=0, errs=0, coll=0
+           duration=42.673s
+== s3 dump-flows
+ cookie=0xc402, duration=33.570s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.1,nw_dst=10.0.0.5,tp_src=40961,tp_dst=5201 actions=output:"s3-l2"
+ cookie=0xc402, duration=33.570s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.6,tp_src=40699,tp_dst=5202 actions=output:"s3-l2"
+ cookie=0xc402, duration=33.569s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.7,tp_src=40382,tp_dst=5203 actions=output:"s3-l2"
+ cookie=0x0, duration=42.672s, table=0, n_packets=0, n_bytes=0, priority=100,dl_dst=00:00:00:00:00:01 actions=output:"s3-l1"
+ cookie=0x0, duration=42.672s, table=0, n_packets=0, n_bytes=0, priority=100,dl_dst=00:00:00:00:00:02 actions=output:"s3-l1"
+ cookie=0x0, duration=42.672s, table=0, n_packets=53228, n_bytes=3514662, priority=100,dl_dst=00:00:00:00:00:03 actions=output:"s3-l1"
+ cookie=0x0, duration=42.672s, table=0, n_packets=0, n_bytes=0, priority=100,dl_dst=00:00:00:00:00:04 actions=output:"s3-l1"
+ cookie=0x0, duration=42.672s, table=0, n_packets=2, n_bytes=92, priority=100,dl_dst=00:00:00:00:00:05 actions=output:"s3-l2"
+ cookie=0x0, duration=42.672s, table=0, n_packets=2, n_bytes=92, priority=100,dl_dst=00:00:00:00:00:06 actions=output:"s3-l2"
+ cookie=0x0, duration=42.672s, table=0, n_packets=17, n_bytes=1611, priority=100,dl_dst=00:00:00:00:00:07 actions=output:"s3-l2"
+ cookie=0x0, duration=42.672s, table=0, n_packets=0, n_bytes=0, priority=100,dl_dst=00:00:00:00:00:08 actions=output:"s3-l2"
+== s3 dump-ports
+OFPST_PORT reply (OF1.3) (xid=0x2): 3 ports
+  port LOCAL: rx pkts=0, bytes=0, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=0, bytes=0, drop=0, errs=0, coll=0
+           duration=42.691s
+  port  "s3-l1": rx pkts=36, bytes=2797, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=53237, bytes=3515388, drop=0, errs=0, coll=0
+           duration=42.692s
+  port  "s3-l2": rx pkts=53237, bytes=3515388, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=32, bytes=2613, drop=0, errs=0, coll=0
+           duration=42.692s
+== s4 dump-flows
+ cookie=0xc402, duration=33.599s, table=0, n_packets=121889, n_bytes=184538498, priority=150,tcp,nw_src=10.0.0.1,nw_dst=10.0.0.5,tp_src=40961,tp_dst=5201 actions=output:"s4-l2"
+ cookie=0xc402, duration=33.598s, table=0, n_packets=0, n_bytes=0, priority=150,tcp,nw_src=10.0.0.2,nw_dst=10.0.0.6,tp_src=40699,tp_dst=5202 actions=output:"s4-l2"
+ cookie=0xc402, duration=33.598s, table=0, n_packets=97527, n_bytes=147655878, priority=150,tcp,nw_src=10.0.0.3,nw_dst=10.0.0.7,tp_src=40382,tp_dst=5203 actions=output:"s4-l2"
+ cookie=0x0, duration=42.689s, table=0, n_packets=66641, n_bytes=4412754, priority=100,dl_dst=00:00:00:00:00:01 actions=output:"s4-l1"
+ cookie=0x0, duration=42.689s, table=0, n_packets=8, n_bytes=640, priority=100,dl_dst=00:00:00:00:00:02 actions=output:"s4-l1"
+ cookie=0x0, duration=42.689s, table=0, n_packets=0, n_bytes=0, priority=100,dl_dst=00:00:00:00:00:03 actions=output:"s4-l1"
+ cookie=0x0, duration=42.689s, table=0, n_packets=2, n_bytes=196, priority=100,dl_dst=00:00:00:00:00:04 actions=output:"s4-l1"
+ cookie=0x0, duration=42.689s, table=0, n_packets=3371, n_bytes=5097927, priority=100,dl_dst=00:00:00:00:00:05 actions=output:"s4-l2"
+ cookie=0x0, duration=42.689s, table=0, n_packets=2, n_bytes=196, priority=100,dl_dst=00:00:00:00:00:06 actions=output:"s4-l2"
+ cookie=0x0, duration=42.689s, table=0, n_packets=349, n_bytes=521151, priority=100,dl_dst=00:00:00:00:00:07 actions=output:"s4-l2"
+ cookie=0x0, duration=42.689s, table=0, n_packets=2, n_bytes=196, priority=100,dl_dst=00:00:00:00:00:08 actions=output:"s4-l2"
+== s4 dump-ports
+OFPST_PORT reply (OF1.3) (xid=0x2): 3 ports
+  port LOCAL: rx pkts=0, bytes=0, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=0, bytes=0, drop=0, errs=0, coll=0
+           duration=42.710s
+  port  "s4-l1": rx pkts=223153, bytes=337814756, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=66660, bytes=4414316, drop=0, errs=0, coll=0
+           duration=42.710s
+  port  "s4-l2": rx pkts=66660, bytes=4414316, drop=0, errs=0, frame=0, over=0, crc=0
+           tx pkts=223149, bytes=337814572, drop=0, errs=0, coll=0
+           duration=42.711s
