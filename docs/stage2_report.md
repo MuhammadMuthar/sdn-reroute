@@ -19,3 +19,4 @@ Where each number comes from:
 | Decision time per flow (0.19 ms ML, 0.002 ms formula), 90 training rows | `results/model/model-2026-10-26/model_summary.md` |
 | 100 Mbit/s pilot (16 trials) | `results/dataset/regime-2026-10-26/regime_pilot.md` |
 | Damage and benefit per run in MB (0.03 ± 0.04, 38.9 ± 14.5) | `results/compare/compare-2026-10-26/chunk4_summary.md`, "Damage per run" table |
+| The 16-setting pilot (640 runs, 54.9 ± 9.3 %) | `results/regime/summary/regime_cells.md` (analysis/regime.py), cross-checked in `results/regime/summary/crosscheck.md` |

@@ -79,10 +79,9 @@ S.append(Paragraph(
     "60 deliberate reroutes, each with a matched run where the flow was not moved; (6) two damage "
     "predictors (a hand-written formula and a machine-learning model) and the cost-aware "
     "controller that uses them. All five controllers run through one experiment runner on the "
-    "same seeded traffic. Against the proposal's core plan, four items are still open and are "
-    "the first work of Stage 3: the pilot under BBR and with RACK loss detection switched off "
-    "(so far only Cubic with RACK on), a margin-only ablation, the k=4 fat-tree, and training "
-    "and testing the model on different topologies.", P))
+    "same seeded traffic. Against the proposal's core plan, three items are still open for "
+    "Stage 3: a margin-only ablation, the k=4 fat-tree, and training and testing the model on "
+    "different topologies.", P))
 
 S.append(Paragraph("2. Refined problem", H))
 S.append(Paragraph(
@@ -185,15 +184,15 @@ S.append(Paragraph(
     "31.4 for the ML model). We state this plainly: at 10 Mbit/s with 1 to 10 ms paths, our "
     "improvement does not yet improve on Hedera.", P))
 S.append(Paragraph(
-    "<b>Next, for Stage 3.</b> A 16-trial pilot at 100 Mbit/s shows 10 to 50 times more "
-    "reordering per move, and moves from a fast path onto an empty slow path cost 6 to 12 % of "
-    "the link for 2 s (only 2 such trials so far). We will therefore (1) test the conditions "
-    "where damage should matter (higher link rates, larger delay gaps, frequent moves, BBR, "
-    "RACK off) and "
-    "retrain there, (2) add the fat-tree network, a link that degrades mid-run and the "
-    "synchronized AI-training traffic from the proposal, and (3) report whichever way it comes "
-    "out. If damage stays small, the finding is that reroute damage is not what limits "
-    "Hedera-style controllers on modern Linux TCP.", P))
+    "<b>The proposal's pilot, finished on 14 November.</b> We repeated the paired reroute test "
+    "in 16 settings: Cubic and BBR, RACK on and off, 10 and 100 Mbit/s, slowest path 10 or 50 ms "
+    "(640 runs). Reordering alone cost nothing in any of them. One kind of move is costly: onto "
+    "an empty path that is much longer (1 ms to 50 ms). The flow's sending window is then far "
+    "too small for the new path, and the path carries 54.9 ± 9.3 % less than it could for 10 s "
+    "(100 Mbit/s, Cubic). A load-only controller picks exactly such empty paths. <b>Next, for "
+    "Stage 3:</b> compare all controllers in that setting with the path-length ratio added to "
+    "the cost model, then the fat-tree and the AI-training traffic. We will report it "
+    "whichever way it comes out.", P))
 
 S.append(Paragraph("7. Source code", H))
 S.append(Paragraph(

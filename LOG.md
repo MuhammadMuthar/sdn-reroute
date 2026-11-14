@@ -1596,3 +1596,17 @@ the moved flow's cwnd (or rate x RTT_p) against the BDP of q, and whether q
 is empty. With datacenter-like gaps (1-10 ms) there is still nothing to
 predict. Whether a 50 ms gap is a fair setting for the course project is
 Mutahar's decision.
+
+## 2026-11-14: Progress report 2 and Chunk 7a cross-check (cloud session)
+
+- `analysis/regime_crosscheck.py`: separate code, iperf3 receiver reports
+  instead of packet traces, for the fast -> slow / empty-destination cells of
+  the 12 settings whose run directories were pushed (the four 100 Mbit/s bbr
+  settings were not in the checkout yet). Same 6 cells meet the damage rule;
+  largest difference between cell means 1.98 points
+  (results/regime/summary/crosscheck.md).
+- `analysis/progress2_figure.py` -> figures/progress2_regime.png;
+  `docs/build_progress2_pdf.py` -> docs/EE353_Progress_Report_2_Mutahar_Uswa.pdf.
+- Stage 2 PDF: the pilot is no longer listed as open; its result replaces the
+  100 Mbit/s 16-trial pilot sentence.
+- No experiment was run in this session.
